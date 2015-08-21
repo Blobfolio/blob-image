@@ -126,7 +126,7 @@ for i in "${use_apps[@]}"; do
 		elif [ "$i" == 'pngcrush' ]; then
 			eval "$use_app -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working\".bak >/dev/null 2>&1"
 		elif [ "$i" == 'pngout' ]; then
-			eval "$use_app -q \"$use_working\""
+			eval "$use_app \"$use_working\" -q"
 		elif [ "$i" == 'jpegoptim' ]; then
 			eval "$use_app -q -f --strip-all --all-progressive \"$use_working\""
 		fi
