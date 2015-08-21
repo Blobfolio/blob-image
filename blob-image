@@ -1,0 +1,174 @@
+#!/bin/bash
+# Compress Images!
+#
+# -q quiet
+# -f file
+# -d directory
+
+
+
+#key settings
+use_file=false
+use_dir=false
+use_quiet=false
+use_tmp="/dev/shm/"
+use_self="$0"
+use_output(){
+	#echo if we aren't being quiet
+	if [ "$use_quiet" == false ]; then
+		echo $1
+	fi
+}
+
+
+
+#parse arguments
+while [[ $# > 1 ]]
+do
+key="$1"
+
+case $key in
+	-f)
+	use_file="$2"
+	shift # past argument
+	;;
+	-d)
+	use_dir="$2"
+	shift # past argument
+	;;
+	-q)
+	use_quiet=true
+	;;
+	*)
+		# unknown option
+	;;
+esac
+shift # past argument or value
+done
+
+
+
+#quickly check the file
+if [ "$use_file" != false ]; then
+
+	#file takes priority over directory
+	use_dir=false
+
+	if [ ! -f "$use_file" ]; then
+		use_output "Invalid file."
+		exit
+	fi
+#and/or directory
+elif [ "$use_dir" != false ]; then
+	if [ ! -e "$use_dir" ]; then
+		 use_output "Invalid directory."
+	else
+		#recurse
+		find $use_dir -type f -regextype egrep -regex '.*\.(jpe?g|png)' | while read i; do
+			if [ "$use_quiet" != true ]; then
+				use_line="$use_self -f \"$i\""
+			else
+				use_line="$use_self -q -f \"$i\""
+			fi
+			eval $use_line
+		done
+	fi
+	exit;
+#neither?
+else
+	use_output "Missing file or directory."
+	exit
+fi
+
+
+
+#does this file look about right?
+use_type=`file -b --mime-type "$use_file"`
+
+if [ "$use_type" == "image/jpeg" ]; then
+	use_ext='jpg'
+	use_apps=( "jpegoptim" )
+elif [ "$use_type" == "image/png" ]; then
+	use_ext='png'
+	use_apps=( "optipng" "advpng" "pngcrush" "pngout" )
+else
+	use_output "Could not work on: $use_file"
+	exit
+fi
+
+
+
+#make some working copies
+size_original=`wc -c < "$use_file"`
+use_best="${use_tmp}blobimage-best.${use_ext}"
+use_working="${use_tmp}blobimage-working.${use_ext}"
+cp "$use_file" "$use_best"
+
+use_output "------------------------------"
+use_output "$use_file"
+use_output "------------------------------"
+use_output "     Type: $use_type"
+use_output "     Size: $size_original bytes"
+
+for i in "${use_apps[@]}"; do
+	use_app=`command -v $i || echo 0`
+
+	if [ "$use_app" != "0" ]; then
+		use_output ""
+		use_output "     Recompressing with $i..."
+
+		cp "$use_file" "$use_working"
+
+		if [ "$i" == 'optipng' ]; then
+			eval "$use_app -quiet -force -o7 \"$use_working\""
+		elif [ "$i" == 'advpng' ]; then
+			eval "$use_app -q -f -z4 \"$use_working\""
+		elif [ "$i" == 'pngcrush' ]; then
+			eval "$use_app -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working\".bak >/dev/null 2>&1"
+		elif [ "$i" == 'pngout' ]; then
+			eval "$use_app -q \"$use_working\""
+		elif [ "$i" == 'jpegoptim' ]; then
+			eval "$use_app -q -f --strip-all --all-progressive \"$use_working\""
+		fi
+
+		size_best=`wc -c < $use_best`
+		size_working=`wc -c < $use_working`
+
+		#an improvement!
+		if [ $size_working -lt $size_best ]; then
+			cp -f "$use_working" "$use_best"
+		fi
+
+		use_output "     Size: $size_working bytes"
+
+		rm "$use_working"
+
+		#pngcrush has a stupid backup file
+		if [ "$i" == 'pngcrush' ]; then
+			rm "$use_working".bak
+		fi
+	fi
+done
+
+#wrap up!
+size_best=`wc -c < $use_best`
+if [ $size_best -lt $size_original ]; then
+
+	size_diff=`awk "BEGIN {printf \"%.2f\n\", $size_best/$size_original*100}"`
+	use_output ""
+	use_output "     Best: $size_best bytes ($size_diff%)"
+
+	use_user=`stat -c %U "$use_file"`
+	use_group=`stat -c %G "$use_file"`
+
+	cp -f "$use_best" "$use_file"
+	chown $use_user:$use_group "$use_file"
+else
+	use_output ""
+	use_output "    No improvement."
+fi
+
+rm "$use_best"
+
+use_output ""
+use_output ""
