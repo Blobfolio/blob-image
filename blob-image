@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # https://blobfolio.com
-# ©2015 Blobfolio, LLC. Some rights reserved.
+# ©2016 Blobfolio, LLC. Some rights reserved.
 #
 # Blob Image
 # Losslessly compress JPEG and PNG images
@@ -9,6 +9,7 @@
 # USAGE:
 # -q quiet
 # -f file
+# -mt optimize for multi-core machines
 # -d directory
 
 
@@ -19,6 +20,7 @@
 use_file=false
 use_dir=false
 use_quiet=false
+use_multithreaded=false
 use_tmp="/dev/shm/"
 use_self="$0"
 use_time=`date +"%s.%N"`
@@ -49,6 +51,9 @@ case $key in
 	;;
 	-q)
 	use_quiet=true
+	;;
+	-mt)
+	use_multithreaded=true
 	;;
 	*)
 		# unknown option
@@ -154,13 +159,21 @@ for i in "${use_apps[@]}"; do
 		elif [ "$i" == 'advpng' ]; then
 			eval "$use_app -q -f -z4 \"$use_working\""
 		elif [ "$i" == 'pngcrush' ]; then
-			eval "$use_app -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working.bak\" >/dev/null 2>&1"
+			if [ "$use_multithreaded" == false ]; then
+				eval "$use_app -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working.bak\" >/dev/null 2>&1"
+			else
+				eval "$use_app -rem gAMA -rem alla -brute -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working.bak\" >/dev/null 2>&1"
+			fi
 		elif [ "$i" == 'pngout' ]; then
 			eval "$use_app \"$use_working\" -q"
 		elif [ "$i" == 'jpegoptim' ]; then
 			eval "$use_app -q -f --strip-all --all-progressive \"$use_working\""
 		elif [ "$i" == 'jpegrescan' ]; then
-			eval "$use_app -q \"$use_working\" \"$use_working.bak\" && mv \"$use_working.bak\" \"$use_working\""
+			if [ "$use_multithreaded" == false ]; then
+				eval "$use_app -q \"$use_working\" \"$use_working.bak\" && mv \"$use_working.bak\" \"$use_working\""
+			else
+				eval "$use_app -q -t \"$use_working\" \"$use_working.bak\" && mv \"$use_working.bak\" \"$use_working\""
+			fi
 		fi
 
 		#check file sizes
