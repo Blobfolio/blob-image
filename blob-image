@@ -159,7 +159,11 @@ for i in "${use_apps[@]}"; do
 		elif [ "$i" == 'advpng' ]; then
 			eval "$use_app -q -f -z4 \"$use_working\""
 		elif [ "$i" == 'pngcrush' ]; then
-			eval "$use_app -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time -brute -ow \"$use_working\" >/dev/null 2>&1"
+			if [ "$use_multithreaded" == false ]; then
+				eval "$use_app -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working.bak\" >/dev/null 2>&1"
+			else
+				eval "$use_app -rem gAMA -rem alla -brute -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working.bak\" >/dev/null 2>&1"
+			fi
 		elif [ "$i" == 'pngout' ]; then
 			eval "$use_app \"$use_working\" -q"
 		elif [ "$i" == 'jpegoptim' ]; then
@@ -187,6 +191,11 @@ for i in "${use_apps[@]}"; do
 		use_output "     Size: $size_working bytes ($size_diff%)"
 
 		rm "$use_working"
+
+		#pngcrush leaves garbage behind
+		if [ "$i" == 'pngcrush' ]; then
+			rm "$use_working".bak
+		fi
 	fi
 done
 
