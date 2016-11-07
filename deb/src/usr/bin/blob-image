@@ -1,11 +1,12 @@
 #!/bin/bash
 #
-# https://blobfolio.com
-# version: 1.0
-# ©2016 Blobfolio, LLC. Some rights reserved.
+# blob-image
+# version: 1.0.1
 #
-# Blob Image
-# Losslessly compress JPEG and PNG images
+# Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
+# This work is free. You can redistribute it and/or modify
+# it under the terms of the Do What The Fuck You Want To
+# Public License, Version 2.
 #
 # USAGE:
 # -q quiet
@@ -18,17 +19,25 @@
 #--------------------------------------------------
 # Default settings
 
-use_file=false
-use_dir=false
-use_quiet=false
-use_multithreaded=false
-use_tmp="/dev/shm/"
-use_self="$0"
-use_time=`date +"%s.%N"`
+use_dir=false						#target directory
+use_file=false						#target file
+use_log="/var/log/blob-image.log"	#log file
+use_multithreaded=false				#multi-threading
+use_quiet=false						#suppress stdout
+use_self="$0"						#script location
+use_time=`date +"%s.%N"`			#timestamp
+use_tmp="/dev/shm/"					#working directory
+
+#fallback to /tmp if /dev/shm doesn't exist
+if [ ! -d "$use_tmp" ]; then
+	use_tmp="/tmp/"
+fi
+
+#a simple wrapper for script output
 use_output(){
 	#echo if we aren't being quiet
 	if [ "$use_quiet" == false ]; then
-		echo $1
+		echo "$1"
 	fi
 }
 
@@ -92,7 +101,7 @@ elif [ "$use_dir" != false ]; then
 			else
 				use_line="$use_self -q -f \"$i\""
 			fi
-			eval $use_line
+			eval "$use_line"
 		done
 	fi
 	exit;
@@ -129,6 +138,14 @@ fi
 size_original=`wc -c < "$use_file"`
 use_best="${use_tmp}blobimage-best.${use_time}.${use_ext}"
 use_working="${use_tmp}blobimage-working.${use_time}.${use_ext}"
+
+#avoid collisions with our working files
+while [ -f "$use_working" ] || [ -f "$use_best" ]; do
+	use_collision=$(( ( RANDOM % 9999 )  + 1 ))
+	use_best="${use_tmp}blobimage-best.${use_collision}.${use_ext}"
+	use_working="${use_tmp}blobimage-working.${use_collision}.${use_ext}"
+done
+
 cp "$use_file" "$use_best"
 
 #store the original owner info in case blob-image is being run as a stranger
@@ -141,16 +158,16 @@ use_start=`date +"%s.%N"`
 use_output "--------------------------------------------------"
 use_output "$use_file"
 use_output "--------------------------------------------------"
-use_output "     Type: $use_type"
-use_output "     Size: $size_original bytes"
+use_output "    Type: $use_type"
+use_output "    Size: $size_original bytes"
 
 #loop through compression programs
 for i in "${use_apps[@]}"; do
-	use_app=`command -v $i || echo 0`
+	use_app=`command -v "$i" || echo 0`
 
 	if [ "$use_app" != "0" ]; then
 		use_output ""
-		use_output "     Recompressing with $i..."
+		use_output "    Recompressing with $i..."
 
 		cp "$use_file" "$use_working"
 
@@ -178,45 +195,56 @@ for i in "${use_apps[@]}"; do
 		fi
 
 		#check file sizes
-		size_best=`wc -c < $use_best`
-		size_working=`wc -c < $use_working`
+		size_best=`wc -c < "$use_best"`
+		size_working=`wc -c < "$use_working"`
 		size_diff=`awk "BEGIN {printf \"%.2f\n\", $size_working/$size_original*100}"`
 
 		#an improvement!
 		if [ $size_working -lt $size_best ] && [ $size_working -gt 0 ]; then
 			cp -f "$use_working" "$use_best"
 			cp -f "$use_best" "$use_file"
-			chown $use_user:$use_group "$use_file"
+			chown "$use_user":"$use_group" "$use_file"
 		fi
 
-		use_output "     Size: $size_working bytes ($size_diff%)"
+		use_output "    Size: $size_working bytes ($size_diff%)"
 
 		rm "$use_working"
 
-		#pngcrush leaves garbage behind
-		if [ "$i" == 'pngcrush' ]; then
+		#clean up any temporary files in case the binary
+		#didn't do it for us
+		if [ -f "$use_working".bak ]; then
 			rm "$use_working".bak
 		fi
+	else
+		use_output ""
+		use_output "    $i not installed or outside your \$PATH; skipping..."
 	fi
 done
 
 #wrap up!
-size_best=`wc -c < $use_best`
+size_best=`wc -c < "$use_best"`
 use_end=`date +"%s.%N"`
 use_duration=`awk "BEGIN {printf \"%.2f\n\", $use_end-$use_start}"`
 use_output ""
-use_output "     Done: $use_duration seconds"
+use_output "    Done: $use_duration seconds"
 if [ $size_best -lt $size_original ]; then
 	size_diff=`awk "BEGIN {printf \"%.2f\n\", $size_best/$size_original*100}"`
-	use_output "     Best: $size_best bytes ($size_diff%)"
+	use_output "    Best: $size_best bytes ($size_diff%)"
 else
 	use_output "    No change."
 fi
+rm "$use_best"
 
 #log the result
-echo `date +"%F %T"` \"$use_file\" From: $size_original To: $size_best >> /var/log/blob-image.log
+if [ ! -f "$use_log" ]; then
+	if [ ! `touch "$use_log" 2>/dev/null` ]; then
+		use_output "    Logging failed; could not create $use_log"
+	fi
+fi
 
-rm "$use_best"
+if [ -f "$use_log" ]; then
+	echo `date +"%F %T"` \""$use_file"\" From: "$size_original" To: "$size_best" >> "$use_log"
+fi
 
 use_output ""
 use_output ""
