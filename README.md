@@ -1,6 +1,6 @@
 # blob-image
 
-A brute-force, lossless JPEG/PNG compressor written in BASH (no GUI dependencies).
+A brute-force, lossless JPEG/PNG image compressor written in BASH (no GUI dependencies).
 
 
 
