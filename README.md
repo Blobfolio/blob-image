@@ -57,7 +57,7 @@ wget -qO - https://apt.blobfolio.com/public.gpg.key | apt-key add -
 sudo apt-get install apt-transport-https
 
 # add the repository source
-sudo echo "deb https://apt.blobfolio.com/debian/ jessie main" > /etc/apt/sources.list.d/blobfolio.list
+sudo echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ jessie main" > /etc/apt/sources.list.d/blobfolio.list
 
 # update sources
 sudo apt-get update
