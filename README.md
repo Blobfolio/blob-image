@@ -43,26 +43,30 @@ Third-party utilities provide the actual compression magic. No single applicatio
 You can simply download the blob-image script and make it executable:
 
 ```bash
-sudo wget -O /usr/bin/blob-image https://raw.githubusercontent.com/Blobfolio/blob-image/master/blob-image && sudo chmod +x /usr/bin/blob-image
+wget -O /usr/bin/blob-image https://raw.githubusercontent.com/Blobfolio/blob-image/master/blob-image && chmod +x /usr/bin/blob-image
 ```
 
-Alternatively, `.deb` binaries are available via Blobfolio's APT repository. While official support is limited to Debian Jessie, this should work for most Debian-based distributions:
+Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Jessie and Ubuntu Yakkety. (Other Debian-based distributions may also work, but aren't officially supported.)
 
 ```bash
-# import the GPG key
+# Import the signing key
 wget -qO - https://apt.blobfolio.com/public.gpg.key | apt-key add -
 
-# apt.blobfolio.com requires HTTPS connection support
-# in apt. if not already installed, you can run:
-sudo apt-get install apt-transport-https
+# apt.blobfolio.com requires HTTPS connection support.
+# This may or may not already be configured on your
+# machine. If APT is unable to connect, install:
+apt-get install apt-transport-https
 
-# add the repository source
-sudo echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ jessie main" > /etc/apt/sources.list.d/blobfolio.list
+# Debian Jessie
+echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ jessie main" > /etc/apt/sources.list.d/blobfolio.list
 
-# update sources
-sudo apt-get update
+# Ubuntu Yakkety
+echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ yakkety main" > /etc/apt/sources.list.d/blobfolio.list
 
-# install it!
+# Update APT sources
+apt-get update
+
+# Install it!
 sudo apt-get install blob-image
 ```
 
