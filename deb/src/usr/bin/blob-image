@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.0.1
+# version: 1.0.2
 #
 # Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
 # This work is free. You can redistribute it and/or modify
@@ -95,7 +95,7 @@ elif [ "$use_dir" != false ]; then
 		 use_output "Invalid directory."
 	else
 		#recurse to file mode
-		find "$use_dir" -type f -regextype egrep -iregex '.*\.(jpe?g|png)' | while read i; do
+		find "$use_dir" -type f -regextype egrep -iregex '.*\.(jpe?g|png)' | sort | while read i; do
 			if [ "$use_quiet" != true ]; then
 				use_line="$use_self -f \"$i\""
 			else
