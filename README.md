@@ -46,7 +46,7 @@ You can simply download the blob-image script and make it executable:
 wget -O /usr/bin/blob-image https://raw.githubusercontent.com/Blobfolio/blob-image/master/blob-image && chmod +x /usr/bin/blob-image
 ```
 
-Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Jessie and Ubuntu Yakkety. (Other Debian-based distributions may also work, but aren't officially supported.)
+Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Stretch and Ubuntu Zesty. (Other Debian-based distributions may also work, but aren't officially supported.)
 
 ```bash
 # Import the signing key
@@ -57,11 +57,11 @@ wget -qO - https://apt.blobfolio.com/public.gpg.key | apt-key add -
 # machine. If APT is unable to connect, install:
 apt-get install apt-transport-https
 
-# Debian Jessie
-echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ jessie main" > /etc/apt/sources.list.d/blobfolio.list
+# Debian Stretch
+echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ stretch main" > /etc/apt/sources.list.d/blobfolio.list
 
-# Ubuntu Yakkety
-echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ yakkety main" > /etc/apt/sources.list.d/blobfolio.list
+# Ubuntu Zesty
+echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ zesty main" > /etc/apt/sources.list.d/blobfolio.list
 
 # Update APT sources
 apt-get update
@@ -104,7 +104,7 @@ sudo chown yourusername: /var/log/blob-image.log
 
 ## License
 
-Copyright © 2016 [Blobfolio, LLC](https://blobfolio.com) &lt;hello@blobfolio.com&gt;
+Copyright © 2017 [Blobfolio, LLC](https://blobfolio.com) &lt;hello@blobfolio.com&gt;
 
 This work is free. You can redistribute it and/or modify it under the terms of the Do What The Fuck You Want To Public License, Version 2.
 
