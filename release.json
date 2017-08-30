@@ -1,7 +1,7 @@
 {
   "name": "blob-image",
   "homepage": "https:\/\/github.com\/Blobfolio\/blob-image",
-  "version": "1.0.2",
+  "version": "1.0.2-2",
   "license": "WTFPL",
   "download": "https://github.com/Blobfolio/blob-image/raw/master/deb/blob-image_latest.deb"
 }
