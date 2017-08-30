@@ -49,7 +49,7 @@ wget -O /usr/bin/blob-image https://raw.githubusercontent.com/Blobfolio/blob-ima
 Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Stretch and Ubuntu Zesty. (Other Debian-based distributions may also work, but aren't officially supported.)
 
 ```bash
-# Import the signing key
+# Import the signing key.
 wget -qO - https://apt.blobfolio.com/public.gpg.key | apt-key add -
 
 # apt.blobfolio.com requires HTTPS connection support.
@@ -57,13 +57,13 @@ wget -qO - https://apt.blobfolio.com/public.gpg.key | apt-key add -
 # machine. If APT is unable to connect, install:
 apt-get install apt-transport-https
 
-# Debian Stretch
+# Debian Stretch.
 echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ stretch main" > /etc/apt/sources.list.d/blobfolio.list
 
-# Ubuntu Zesty
+# Ubuntu Zesty.
 echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ zesty main" > /etc/apt/sources.list.d/blobfolio.list
 
-# Update APT sources
+# Update APT sources.
 apt-get update
 
 # Install it!
@@ -89,7 +89,7 @@ The following runtime flags are available:
 > Recursively search *directory* for JPEG/PNG images and compress them all
 
 ```bash
-# example
+# Example.
 blob-image -f /home/josh/Pictures/foo.jpeg
 ```
 
