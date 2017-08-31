@@ -22,7 +22,7 @@ blob-image is a command line script for Linux servers and desktops that helps au
 
 ## Requirements
 
-blob-image has no GUI dependencies. All it requires is a Linux operating system and BASH shell.
+blob-image has no GUI dependencies. All it requires is a Linux operating system and modern BASH shell.
 
 Third-party utilities provide the actual compression magic. No single application is required, but for best results you should install each of the following:
 
@@ -35,6 +35,7 @@ Third-party utilities provide the actual compression magic. No single applicatio
 #### JPEG
  * [jpegoptim](http://www.kokkonen.net/tjko/projects.html)
  * [jpegrescan](https://github.com/kud/jpegrescan)
+ * [jpegtran](https://github.com/mozilla/mozjpeg)
 
 
 
@@ -47,6 +48,8 @@ wget -O /usr/bin/blob-image https://raw.githubusercontent.com/Blobfolio/blob-ima
 ```
 
 Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Stretch and Ubuntu Zesty. (Other Debian-based distributions may also work, but aren't officially supported.)
+
+Installing blob-image this way will also install each of the different compression tools, so you probably want to do this.
 
 ```bash
 # Import the signing key.
@@ -76,28 +79,19 @@ sudo apt-get install blob-image
 
 The following runtime flags are available:
 
-> -q
-> Suppress STDOUT
-
-> -mt
-> Use multi-threading
-
-> -f */path/to/file*
-> Compress a single file
-
-> -d */path/to/directory*
-> Recursively search *directory* for JPEG/PNG images and compress them all
+| Flag | Description | Default |
+| ---- | ----------- | ------- |
+| -c, --color | Colorize output. | |
+| -h, --help  | Display documentation. | |
+| -l, --log   | Log results to this path. | `/var/log/blob-image.log` |
+| -m, --multithreaded | Optimize performance for multithreaded systems. | |
+| -q, --quiet | Do not throw anything to STDOUT. | |
+| -f | Path to a file. This is deprecated; simply throw file paths onto the end of the command. | |
+| -d | Path to a directory. This is deprecated; simply throw directory paths onto the end of the command. | |
 
 ```bash
-# Example.
-blob-image -f /home/josh/Pictures/foo.jpeg
-```
-
-Results are logged to `/var/log/blob-image.log`. The log file must be writeable by the user executing the blob-image script. If logging doesn't work, you can try:
-
-```bash
-sudo touch /var/log/blob-image.log
-sudo chown yourusername: /var/log/blob-image.log
+# blob-image [-args] [file/dir] [file/dir]...
+blob-image -cm /home/josh/Pictures/foo.jpeg
 ```
 
 
