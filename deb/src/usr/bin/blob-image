@@ -1,250 +1,433 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.0.2
+# version: 1.1.0
 #
 # Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
-# This work is free. You can redistribute it and/or modify
-# it under the terms of the Do What The Fuck You Want To
-# Public License, Version 2.
+# This work is free. You can redistribute it and/or modify it under the
+# terms of the Do What The Fuck You Want To Public License, Version 2.
 #
 # USAGE:
-# -q quiet
-# -f file
-# -mt optimize for multi-core machines
-# -d directory
+#   -c	colors
+#   -h	help
+#	-l	log file location
+#   -m	optimize for multi-core machines
+#   -q	quiet
+#   -d	directory (deprecated)
+#   -f	file (deprecated)
 
 
 
-#--------------------------------------------------
+# ----------------------------------------------------------------------
 # Default settings
+# ----------------------------------------------------------------------
 
-use_dir=false						#target directory
-use_file=false						#target file
-use_log="/var/log/blob-image.log"	#log file
-use_multithreaded=false				#multi-threading
-use_quiet=false						#suppress stdout
-use_self="$0"						#script location
-use_time=`date +"%s.%N"`			#timestamp
-use_tmp="/dev/shm/"					#working directory
+BI_HELP=false						# Display help?
 
-#fallback to /tmp if /dev/shm doesn't exist
-if [ ! -d "$use_tmp" ]; then
-	use_tmp="/tmp/"
+BI_COLOR=false						# Colored output.
+BI_LOG="/var/log/blob-image.log"	# Log file.
+BI_MT=false							# Multi-threading.
+BI_QUIET=false						# Suppress stdout.
+BI_SELF="$0"						# Script location.
+BI_TMP="/dev/shm/"					# Working directory.
+
+BI_FILES=()							# Files to crunch.
+
+# Fall back to /tmp if /dev/shm doesn't exist.
+if [ ! -d "$BI_TMP" ]; then
+	BI_TMP="/tmp/"
 fi
 
-#a simple wrapper for script output
+# A simple wrapper for script output.
 use_output(){
-	#echo if we aren't being quiet
-	if [ "$use_quiet" == false ]; then
-		echo "$1"
+	# Echo if we aren't being quiet.
+	if [ "$BI_QUIET" == false ]; then
+		BI_LINE=$1
+
+		# Strip colors.
+		if [ "$BI_COLOR" == false ]; then
+			use_line=$(echo -e "$1" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g" | sed "s/\x0f//g")
+		fi
+
+		echo -e "$BI_LINE"
 	fi
+}
+
+# Print a help dialogue.
+use_help(){
+	BI_QUIET=false
+
+	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.1.0"
+	use_output ""
+	use_output "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
+	use_output "prioritizes compression over speed, running each image through a"
+	use_output "battery of specialized binaries (if installed)."
+	use_output ""
+	use_output "\e[1;34mJPEG:\e[0m"
+	use_output "jpegtran    \e[35mhttp://jpegclub.org/jpegtran/\e[0m"
+	use_output "jpegoptim   \e[35mhttps://github.com/tjko/jpegoptim\e[0m"
+	use_output "jpegrescan  \e[35mhttps://github.com/kud/jpegrescan\e[0m"
+	use_output ""
+	use_output "\e[1;34mPNG:\e[0m"
+	use_output "optipng     \e[35mhttp://optipng.sourceforge.net/\e[0m"
+	use_output "advpng      \e[35mhttp://www.advancemame.it/doc-advpng.html\e[0m"
+	use_output "pngcrush    \e[35mhttps://pmt.sourceforge.io/pngcrush/\e[0m"
+	use_output "pngout      \e[35mhttp://advsys.net/ken/utils.htm\e[0m"
+	use_output ""
+	use_output "\e[1;34mUse:\e[0m"
+	use_output "blob-image -args [file/dir] [file/dir]…"
+	use_output ""
+	use_output "\e[1;34mOptions:\e[0m"
+	use_output "\e[1m-c\e[0m, \e[1m--color\e[0m"
+	use_output "    Colorize output."
+	use_output "\e[1m-h\e[0m, \e[1m--help\e[0m"
+	use_output "    Display this documentation."
+	use_output "\e[1m-l\e[0m, \e[1m--log\e[0m=/path/to/log"
+	use_output "    Log results to this file."
+	use_output "    Default: /var/log/blob-image.log"
+	use_output "\e[1m-m\e[0m, \e[1m--multithreaded\e[0m"
+	use_output "    Optimize performance for multithreaded systems, where possible."
+	use_output "\e[1m-q\e[0m, \e[1m--quiet\e[0m"
+	use_output "    Suppress STDOUT."
 }
 
 
 
-#--------------------------------------------------
+# ----------------------------------------------------------------------
 # Parse arguments
+# ----------------------------------------------------------------------
 
-while [[ $# > 1 ]]
-do
-key="$1"
-
-case $key in
-	-f)
-	use_file="$2"
-	shift # past argument
-	;;
-	-d)
-	use_dir="$2"
-	shift # past argument
-	;;
-	-q)
-	use_quiet=true
-	;;
-	-mt)
-	use_multithreaded=true
-	;;
-	*)
-		# unknown option
-	;;
-esac
-shift # past argument or value
-done
-
-
-
-#--------------------------------------------------
-# Verify the mode
-
-#files
-if [ "$use_file" != false ]; then
-	#file takes priority over directory
-	use_dir=false
-
-	if [ ! -f "$use_file" ]; then
-		use_output "Invalid file."
-		exit
-	else
-		#convert to full path, for consistency's sake
-		use_file=`realpath "$use_file"`
-	fi
-#directory
-elif [ "$use_dir" != false ]; then
-	if [ ! -e "$use_dir" ]; then
-		 use_output "Invalid directory."
-	else
-		#recurse to file mode
-		find "$use_dir" -type f -regextype egrep -iregex '.*\.(jpe?g|png)' | sort | while read i; do
-			if [ "$use_quiet" != true ]; then
-				use_line="$use_self -f \"$i\""
+# Flags and options.
+BI_ARGS=$(getopt -q -l "color,help,log,multithreaded,quiet" -o "chl:mqf:d:" -- "$@")
+eval set -- "$BI_ARGS"
+while true ; do
+	case "$1" in
+		--) # End of arguments.
+			shift
+			break
+			;;
+		-c|--color) # Colorize output.
+			BI_COLOR=true
+			shift
+			;;
+		-h|--help) # Help.
+			BI_HELP=true
+			shift
+			;;
+		-l|--log)
+			BI_LOG="$2"
+			shift 2
+			;;
+		-m|--multithreaded) # Use multi-threading optimizations.
+			BI_MT=true
+			shift
+			;;
+		-q|--quiet) # Suppress output.
+			BI_QUIET=true
+			shift
+			;;
+		-f) # Deprecated: file.
+			if [ -f "$2" ]; then
+				BI_FILE=$(realpath "$2")
+				BI_FILES+=("$BI_FILE")
 			else
-				use_line="$use_self -q -f \"$i\""
+				use_output "\e[1;31mInvalid file:\e[0m $BI_FILE"
 			fi
-			eval "$use_line"
-		done
-	fi
-	exit;
-#no mode
-else
-	use_output "Missing file or directory."
-	exit
-fi
-
-
-
-#--------------------------------------------------
-# Verify file type
-
-use_type=`file -b --mime-type "$use_file"`
-
-if [ "$use_type" == "image/jpeg" ]; then
-	use_ext='jpg'
-	use_apps=( "jpegoptim" "jpegrescan" )
-elif [ "$use_type" == "image/png" ]; then
-	use_ext='png'
-	use_apps=( "optipng" "advpng" "pngcrush" "pngout" )
-else
-	use_output "Only JPEG and PNG files are supported."
-	exit
-fi
-
-
-
-#--------------------------------------------------
-# Work it!
-
-#first, make some working copies
-size_original=`wc -c < "$use_file"`
-use_best="${use_tmp}blobimage-best.${use_time}.${use_ext}"
-use_working="${use_tmp}blobimage-working.${use_time}.${use_ext}"
-
-#avoid collisions with our working files
-while [ -f "$use_working" ] || [ -f "$use_best" ]; do
-	use_collision=$(( ( RANDOM % 9999 )  + 1 ))
-	use_best="${use_tmp}blobimage-best.${use_collision}.${use_ext}"
-	use_working="${use_tmp}blobimage-working.${use_collision}.${use_ext}"
+			shift 2
+			;;
+		-d) # Deprecated: directory.
+			if [ -d "$2" ]; then
+				BI_DIR=$(realpath "$2")
+				while IFS= read -r -d $'\0'; do
+					BI_FILE=$(realpath "$REPLY")
+					BI_FILES+=("$BI_FILE")
+				done < <(find "$BI_DIR" -type f -regextype egrep -iregex '.*\.(jpe?g|png)' -print0 | sort)
+			else
+				use_output "\e[1;31mInvalid directory:\e[0m $BI_FILE"
+			fi
+			shift 2
+			;;
+		*) # Unknown option.
+			use_output "\e[1;31mInvalid option:\e[0m $1"
+			use_help
+			exit 1
+			;;
+	esac
 done
 
-cp "$use_file" "$use_best"
+# Load help?
+if [ $BI_HELP == true ]; then
+	use_help
+	exit 0
+fi
 
-#store the original owner info in case blob-image is being run as a stranger
-use_user=`stat -c %U "$use_file"`
-use_group=`stat -c %G "$use_file"`
+# Process additional files and directories.
+for i in "$@"; do
+	i=$(realpath "$i")
+	if [ -f "$i" ]; then
+		BI_FILES+=("$i")
+	elif [ -d "$i" ]; then
+		BI_DIR=$(realpath "$i")
+		while IFS= read -r -d $'\0'; do
+			BI_FILE=$(realpath "$REPLY")
+			BI_FILES+=("$BI_FILE")
+		done < <(find "$BI_DIR" -type f -regextype egrep -iregex '.*\.(jpe?g|png)' -print0 | sort)
+	else
+		use_output "\e[1;31mInvalid file:\e[0m $i"
+	fi
+done
 
-#start the timer
-use_start=`date +"%s.%N"`
+# Gotta have at least one file to look at.
+if [ ${#BI_FILES[@]} -lt 1 ]; then
+	use_output "\e[1;31mError:\e[0m Nothing to do."
+	exit 1
+fi
 
-use_output "--------------------------------------------------"
-use_output "$use_file"
-use_output "--------------------------------------------------"
-use_output "    Type: $use_type"
-use_output "    Size: $size_original bytes"
 
-#loop through compression programs
-for i in "${use_apps[@]}"; do
-	use_app=`command -v "$i" || echo 0`
 
-	if [ "$use_app" != "0" ]; then
+# ----------------------------------------------------------------------
+# Find binaries
+# ----------------------------------------------------------------------
+declare -A BI_BINARIES
+
+BI_BINARIES[advpng]=$(command -v "advpng")
+BI_BINARIES[jpegoptim]=$(command -v "jpegoptim")
+BI_BINARIES[jpegrescan]=$(command -v "jpegrescan")
+BI_BINARIES[jpegtran]=$(command -v "/opt/mozjpeg/bin/jpegtran") # Prefer mozjpeg version.
+if [ ! "${BI_BINARIES[jpegtran]}" ]; then
+	BI_BINARIES[jpegtran]=$(command -v "jpegtran")
+fi
+BI_BINARIES[optipng]=$(command -v "optipng")
+BI_BINARIES[pngcrush]=$(command -v "pngcrush")
+BI_BINARIES[pngout]=$(command -v "pngout")
+
+BI_JPEG=()
+if [ "${BI_BINARIES[jpegtran]}" ]; then
+	BI_JPEG+=("jpegtran")
+fi
+if [ "${BI_BINARIES[jpegoptim]}" ]; then
+	BI_JPEG+=("jpegoptim")
+fi
+if [ "${BI_BINARIES[jpegrescan]}" ]; then
+	BI_JPEG+=("jpegrescan")
+fi
+
+BI_PNG=()
+if [ "${BI_BINARIES[optipng]}" ]; then
+	BI_PNG+=("optipng")
+fi
+if [ "${BI_BINARIES[advpng]}" ]; then
+	BI_PNG+=("advpng")
+fi
+if [ "${BI_BINARIES[pngcrush]}" ]; then
+	BI_PNG+=("pngcrush")
+fi
+if [ "${BI_BINARIES[pngout]}" ]; then
+	BI_PNG+=("pngout")
+fi
+
+
+
+# ----------------------------------------------------------------------
+# Loop it!
+# ----------------------------------------------------------------------
+
+BI_INDEX=0
+BI_TOTAL=${#BI_FILES[@]}
+for i in "${BI_FILES[@]}"; do
+	# Keep track of progress.
+	TIME_START=$(date +"%s.%N")
+	BI_INDEX=$[$BI_INDEX+1]
+	BI_PROGRESS=$(awk "BEGIN {printf \"%.2f\n\", $BI_INDEX/$BI_TOTAL*100}")"%"
+
+
+
+	# We can only do something about JPEG and PNG files.
+	FILE_TYPE=$(file -b --mime-type "$i")
+	if [ "$FILE_TYPE" == "image/jpeg" ]; then
+		FILE_EXT="jpg"
+		FILE_BINARIES=("${BI_JPEG[@]}")
+	elif [ "$FILE_TYPE" == "image/png" ]; then
+		FILE_EXT="png"
+		FILE_BINARIES=("${BI_PNG[@]}")
+	else
+		use_output "\e[1;31mInvalid file:\e[0m $i"
 		use_output ""
-		use_output "    Recompressing with $i..."
-
-		cp "$use_file" "$use_working"
-
-		#each program is a little different...
-		if [ "$i" == 'optipng' ]; then
-			eval "$use_app -quiet -force -o7 \"$use_working\""
-		elif [ "$i" == 'advpng' ]; then
-			eval "$use_app -q -f -z4 \"$use_working\""
-		elif [ "$i" == 'pngcrush' ]; then
-			if [ "$use_multithreaded" == false ]; then
-				eval "$use_app -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working.bak\" >/dev/null 2>&1"
-			else
-				eval "$use_app -rem gAMA -rem alla -brute -rem cHRM -rem iCCP -rem sRGB -rem time \"$use_working\" \"$use_working.bak\" >/dev/null 2>&1"
-			fi
-		elif [ "$i" == 'pngout' ]; then
-			eval "$use_app \"$use_working\" -q"
-		elif [ "$i" == 'jpegoptim' ]; then
-			eval "$use_app -q -f --strip-all --all-progressive \"$use_working\""
-		elif [ "$i" == 'jpegrescan' ]; then
-			if [ "$use_multithreaded" == false ]; then
-				eval "$use_app -q \"$use_working\" \"$use_working.bak\" && mv \"$use_working.bak\" \"$use_working\""
-			else
-				eval "$use_app -q -t \"$use_working\" \"$use_working.bak\" && mv \"$use_working.bak\" \"$use_working\""
-			fi
-		fi
-
-		#check file sizes
-		size_best=`wc -c < "$use_best"`
-		size_working=`wc -c < "$use_working"`
-		size_diff=`awk "BEGIN {printf \"%.2f\n\", $size_working/$size_original*100}"`
-
-		#an improvement!
-		if [ $size_working -lt $size_best ] && [ $size_working -gt 0 ]; then
-			cp -f "$use_working" "$use_best"
-			cp -f "$use_best" "$use_file"
-			chown "$use_user":"$use_group" "$use_file"
-		fi
-
-		use_output "    Size: $size_working bytes ($size_diff%)"
-
-		rm "$use_working"
-
-		#clean up any temporary files in case the binary
-		#didn't do it for us
-		if [ -f "$use_working".bak ]; then
-			rm "$use_working".bak
-		fi
-	else
 		use_output ""
-		use_output "    $i not installed or outside your \$PATH; skipping..."
+		continue;
 	fi
+
+
+
+	# Come up with a nice title. This is surprisingly complicated. Haha.
+	BI_TITLE="$i"
+	BI_LENGTH=$((71 - ${#BI_PROGRESS}))
+	BI_PADLENGTH=0
+	if [ ${#BI_TITLE} -gt $BI_LENGTH ]; then
+		BI_TITLE="…${BI_TITLE: $((1 - $BI_LENGTH))}"
+	elif [ ${#BI_TITLE} -lt $BI_LENGTH ]; then
+		BI_PADLENGTH=$(($BI_LENGTH - ${#BI_TITLE}))
+	fi
+	if [ $BI_PADLENGTH -gt 0 ]; then
+		BI_PAD="----------------------------------------------------------------------"
+		BI_PAD="${BI_PAD:0:$BI_PADLENGTH}"
+	else
+		BI_PAD=""
+	fi
+	BI_TITLE="\e[1;34m$BI_TITLE\e[0m \e[90m$BI_PAD $BI_PROGRESS\e[0m"
+	use_output "$BI_TITLE"
+
+
+
+	# Make sure we have programs to use.
+	if [ ${#BI_FILES[@]} -lt 1 ]; then
+		use_output "\e[1;31mError:\e[0m No $FILE_TYPE tools were be found."
+		use_output ""
+		use_output ""
+		continue;
+	fi
+
+
+
+	# Sort out file properties.
+	FILE_ORIGINAL="$i"
+	SIZE_ORIGINAL=$(wc -c < "$FILE_ORIGINAL")
+	FILE_USER=$(stat -c %U "$FILE_ORIGINAL")
+	FILE_GROUP=$(stat -c %G "$FILE_ORIGINAL")
+
+	BI_RANDOM=$(( ( RANDOM % 9999 ) + 1 ))
+	FILE_BEST="${BI_TMP}blobimage-best.${BI_RANDOM}.${FILE_EXT}"
+	FILE_WORKING="${BI_TMP}blobimage-working.${BI_RANDOM}.${FILE_EXT}"
+	while [ -f "$FILE_BEST" ] || [ -f "$FILE_WORKING" ]; do
+		BI_RANDOM=$(( ( RANDOM % 9999 )  + 1 ))
+		FILE_BEST="${BI_TMP}blobimage-best.${BI_RANDOM}.${FILE_EXT}"
+		FILE_WORKING="${BI_TMP}blobimage-working.${BI_RANDOM}.${FILE_EXT}"
+	done
+
+	# Populate the best with the working file.
+	cp "$FILE_ORIGINAL" "$FILE_BEST"
+
+	use_output "\e[90mType:\e[0m $FILE_TYPE"
+	use_output "\e[90mSize:\e[0m $SIZE_ORIGINAL bytes"
+
+
+
+	# Crunch crunch crunch!
+	for i in "${FILE_BINARIES[@]}"; do
+		use_output ""
+		use_output "\e[1m$i\e[0m"
+
+		cp "$FILE_BEST" "$FILE_WORKING"
+
+
+
+		# Run the appropriate binary.
+		case $i in
+			advpng)
+				eval "\"${BI_BINARIES[$i]}\" -q -f -z4 \"$FILE_WORKING\""
+				;;
+			jpegoptim)
+				eval "\"${BI_BINARIES[$i]}\" -q -f --strip-all --all-progressive \"$FILE_WORKING\""
+				;;
+			jpegrescan)
+				if [ "$BI_MT" == false ]; then
+					eval "\"${BI_BINARIES[$i]}\" -q \"$FILE_WORKING\" \"$FILE_WORKING.bak\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
+				else
+					eval "\"${BI_BINARIES[$i]}\" -q -t \"$FILE_WORKING\" \"$FILE_WORKING.bak\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
+				fi
+				;;
+			jpegtran)
+				eval "\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
+				;;
+			optipng)
+				eval "\"${BI_BINARIES[$i]}\" -quiet -force -o7 \"$FILE_WORKING\""
+				;;
+			pngcrush)
+				if [ "$BI_MT" == false ]; then
+					eval "\"${BI_BINARIES[$i]}\" -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1"
+				else
+					eval "\"${BI_BINARIES[$i]}\" -rem gAMA -rem alla -brute -rem cHRM -rem iCCP -rem sRGB -rem time \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1"
+				fi
+				;;
+			pngout)
+				eval "\"${BI_BINARIES[$i]}\" \"$FILE_WORKING\" -q"
+				;;
+		esac
+
+
+
+		# What happened?"
+		SIZE_WORKING=$(wc -c < "$FILE_WORKING")
+		SIZE_BEST=$(wc -c < "$FILE_BEST")
+		SIZE_DIFF=$(awk "BEGIN {printf \"%.2f\n\", $SIZE_WORKING/$SIZE_ORIGINAL*100}")
+
+
+
+		# An improvement!
+		if [ $SIZE_WORKING -lt $SIZE_BEST ] && [ $SIZE_WORKING -gt 0 ]; then
+			cp -f "$FILE_WORKING" "$FILE_BEST"
+			cp -f "$FILE_BEST" "$FILE_ORIGINAL"
+			chown "$FILE_USER":"$FILE_GROUP" "$FILE_ORIGINAL"
+		fi
+
+
+
+		# Report change.
+		if [ $SIZE_WORKING -lt $SIZE_ORIGINAL ]; then
+			use_output "\e[90mSize:\e[0m $SIZE_WORKING bytes \e[32m($SIZE_DIFF%)\e[0m"
+		elif [ $SIZE_WORKING -eq $SIZE_ORIGINAL ]; then
+			use_output "\e[90mSize:\e[0m $SIZE_WORKING bytes \e[33m($SIZE_DIFF%)\e[0m"
+		else
+			use_output "\e[90mSize:\e[0m $SIZE_WORKING bytes \e[31m($SIZE_DIFF%)\e[0m"
+		fi
+
+
+
+		# Clean up.
+		if [ -e "$FILE_WORKING" ]; then
+			rm "$FILE_WORKING"
+		fi
+		if [ -e "$FILE_WORKING.bak" ]; then
+			rm "$FILE_WORKING.bak"
+		fi
+	done
+
+
+	# Wrap up.
+	SIZE_BEST=$(wc -c < "$FILE_BEST")
+	TIME_END=$(date +"%s.%N")
+	TIME_ELAPSED=$(awk "BEGIN {printf \"%.2f\n\", $TIME_END-$TIME_START}")
+	use_output ""
+	use_output "\e[90mDone:\e[0m $TIME_ELAPSED seconds"
+	if [ $SIZE_BEST -lt $SIZE_ORIGINAL ]; then
+		SIZE_DIFF=$(awk "BEGIN {printf \"%.2f\n\", $SIZE_BEST/$SIZE_ORIGINAL*100}")
+		use_output "\e[90mBest:\e[0m $SIZE_BEST bytes \e[32m($SIZE_DIFF%)\e[0m"
+	else
+		use_output "\e[90mNo change.\e[0m"
+	fi
+
+	rm "$FILE_BEST"
+
+
+
+	# Log the result.
+	if [ ! -f "$BI_LOG" ]; then
+		if [ ! $(touch "$BI_LOG" 2>/dev/null) ]; then
+			use_output "\e[1;31mLogging failed:\e[0m could not create $BI_LOG"
+		fi
+	fi
+
+	if [ -f "$BI_LOG" ]; then
+		echo $(date +"%F %T") \""$FILE_ORIGINAL"\" From: "$SIZE_ORIGINAL" To: "$SIZE_BEST" >> "$BI_LOG"
+	fi
+
+
+
+	use_output ""
+	use_output ""
 done
 
-#wrap up!
-size_best=`wc -c < "$use_best"`
-use_end=`date +"%s.%N"`
-use_duration=`awk "BEGIN {printf \"%.2f\n\", $use_end-$use_start}"`
-use_output ""
-use_output "    Done: $use_duration seconds"
-if [ $size_best -lt $size_original ]; then
-	size_diff=`awk "BEGIN {printf \"%.2f\n\", $size_best/$size_original*100}"`
-	use_output "    Best: $size_best bytes ($size_diff%)"
-else
-	use_output "    No change."
-fi
-rm "$use_best"
 
-#log the result
-if [ ! -f "$use_log" ]; then
-	if [ ! `touch "$use_log" 2>/dev/null` ]; then
-		use_output "    Logging failed; could not create $use_log"
-	fi
-fi
 
-if [ -f "$use_log" ]; then
-	echo `date +"%F %T"` \""$use_file"\" From: "$size_original" To: "$size_best" >> "$use_log"
-fi
-
-use_output ""
-use_output ""
+# That's all, folks.
+exit 0
