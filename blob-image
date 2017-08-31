@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.1.1
+# version: 1.1.2
 #
 # Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
 # This work is free. You can redistribute it and/or modify it under the
@@ -46,7 +46,7 @@ use_output(){
 
 		# Strip colors.
 		if [ "$BI_COLOR" == false ]; then
-			use_line=$(echo -e "$1" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g" | sed "s/\x0f//g")
+			BI_LINE=$(echo -e "$1" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g" | sed "s/\x0f//g")
 		fi
 
 		echo -e "$BI_LINE"
@@ -57,7 +57,7 @@ use_output(){
 use_help(){
 	BI_QUIET=false
 
-	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.1.1"
+	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.1.2"
 	use_output ""
 	use_output "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
 	use_output "prioritizes compression over speed, running each image through a"
