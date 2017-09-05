@@ -79,15 +79,18 @@ sudo apt-get install blob-image
 
 The following runtime flags are available:
 
-| Flag | Description | Default |
-| ---- | ----------- | ------- |
-| -c, --color | Colorize output. | |
-| -h, --help  | Display documentation. | |
-| -l, --log   | Log results to this path. | `/var/log/blob-image.log` |
-| -m, --multithreaded | Optimize performance for multithreaded systems. | |
-| -q, --quiet | Do not throw anything to STDOUT. | |
-| -f | Path to a file. This is deprecated; simply throw file paths onto the end of the command. | |
-| -d | Path to a directory. This is deprecated; simply throw directory paths onto the end of the command. | |
+| Flag | Description |
+| ---- | ----------- |
+| -c, --color | Colorize output. |
+| -d, --dry-run | Test compression without saving changes. |
+| -h, --help  | Display documentation. |
+| -l, --log *=/path*   | Log results to this path. Default: `/var/log/blob-image.log` |
+| --max-size *=123* | Ignore files larger than this value in bytes. `K`, `M`, `G` units are allowed. | 
+| --min-size *=123* | Ignore files smaller than this value in bytes. `K`, `M`, `G` units are allowed. |
+| -m, --multithreaded | Optimize performance for multithreaded systems. |
+| -q, --quiet | Do not throw anything to STDOUT. |
+| --skip-jpeg | Do not process JPEG images. |
+| --skip-png | Do not process PNG images. |
 
 ```bash
 # blob-image [-args] [file/dir] [file/dir]...
