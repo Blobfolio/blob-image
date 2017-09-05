@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.1.2
+# version: 1.2.0
 #
 # Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
 # This work is free. You can redistribute it and/or modify it under the
@@ -13,8 +13,10 @@
 #	-l	log file location
 #   -m	optimize for multi-core machines
 #   -q	quiet
-#   -d	directory (deprecated)
-#   -f	file (deprecated)
+#	--max-size
+#	--min-size
+#	--skip-jpeg / --skip-jpg
+#	--skip-png
 
 
 
@@ -30,6 +32,10 @@ BI_MT=false							# Multi-threading.
 BI_QUIET=false						# Suppress stdout.
 BI_SELF="$0"						# Script location.
 BI_TMP="/dev/shm/"					# Working directory.
+SKIP_JPEG=false						# Skip JPEG files.
+SKIP_PNG=false						# Skip PNG files.
+declare -i MAX_SIZE=0				# Maximum size to scan.
+declare -i MIN_SIZE=0				# Minimum size to scan.
 
 BI_FILES=()							# Files to crunch.
 
@@ -38,7 +44,14 @@ if [ ! -d "$BI_TMP" ]; then
 	BI_TMP="/tmp/"
 fi
 
-# A simple wrapper for script output.
+#
+# Output Wrapper
+#
+# Handle STDOUT options like color and quiet.
+#
+# @param string Message.
+# @echo string|void Message.
+#
 use_output(){
 	# Echo if we aren't being quiet.
 	if [ "$BI_QUIET" == false ]; then
@@ -53,11 +66,50 @@ use_output(){
 	fi
 }
 
-# Print a help dialogue.
+#
+# Byte Unit Handler
+#
+# Convert 123K, 123M, etc., to proper integer bytes.
+#
+# @param mixed Size w/ or w/o unit.
+# @echo int Bytes.
+#
+use_nicebytes() {
+	local RAW=$1
+	declare -i VALUE=0
+
+	RAW=$(echo "$RAW" | sed 's/[^0-9gGmMkKbB]//g')
+	if [ ! "$RAW" ]; then
+		echo 'empty'
+		RAW=0
+	fi
+
+	for i in "g G m M k K b B"; do
+		RAW=${RAW//[gG]/*1024m}
+		RAW=${RAW//[mM]/*1024k}
+		RAW=${RAW//[kK]/*1024}
+		RAW=${RAW//[bB]/*1}
+	done
+	VALUE="$RAW"
+
+	if [ ${VALUE//\*/} -gt 0 ]; then
+		echo $VALUE
+	else
+		echo 0
+	fi
+}
+
+#
+# Help
+#
+# Print help and use dialogue.
+#
+# @echo string Help.
+#
 use_help(){
 	BI_QUIET=false
 
-	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.1.2"
+	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.2.0"
 	use_output ""
 	use_output "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
 	use_output "prioritizes compression over speed, running each image through a"
@@ -85,10 +137,20 @@ use_help(){
 	use_output "\e[1m-l\e[0m, \e[1m--log\e[0m=/path/to/log"
 	use_output "    Log results to this file."
 	use_output "    Default: /var/log/blob-image.log"
+	use_output "\e[1m--max-size\e[0m=XX"
+	use_output "    Files larger than this value will be skipped. Value should be in"
+	use_output "    bytes. K, M, and G units are allowed."
+	use_output "\e[1m--min-size\e[0m=XX"
+	use_output "    Files smaller than this value will be skipped. Value should be in"
+	use_output "    bytes. K, M, and G units are allowed."
 	use_output "\e[1m-m\e[0m, \e[1m--multithreaded\e[0m"
 	use_output "    Optimize performance for multithreaded systems, where possible."
 	use_output "\e[1m-q\e[0m, \e[1m--quiet\e[0m"
 	use_output "    Suppress STDOUT."
+	use_output "\e[1m--skip-jpeg\e[0m"
+	use_output "    Do not process any JPEG images."
+	use_output "\e[1m--skip-png\e[0m"
+	use_output "    Do not process any PNG images."
 }
 
 
@@ -98,7 +160,7 @@ use_help(){
 # ----------------------------------------------------------------------
 
 # Flags and options.
-BI_ARGS=$(getopt -q -l "color,help,log,multithreaded,quiet" -o "chl:mqf:d:" -- "$@")
+BI_ARGS=$(getopt -q -l "color,help,log,multithreaded,quiet,max-size:,min-size:,skip-jpeg,skip-jpg,skip-png" -o "chl:mq" -- "$@")
 eval set -- "$BI_ARGS"
 while true ; do
 	case "$1" in
@@ -115,8 +177,16 @@ while true ; do
 			shift
 			;;
 		-l|--log)
-			BI_LOG="$2"
-			shift 2
+			case "$2" in
+				""|-*)
+					use_output "\e[1;31mValue required:\e[0m --log=/something/file.log"
+					exit 1
+					;;
+				*)
+					BI_LOG=$(realpath "$2")
+					shift 2
+					;;
+			esac
 			;;
 		-m|--multithreaded) # Use multi-threading optimizations.
 			BI_MT=true
@@ -126,26 +196,40 @@ while true ; do
 			BI_QUIET=true
 			shift
 			;;
-		-f) # Deprecated: file.
-			if [ -f "$2" ]; then
-				BI_FILE=$(realpath "$2")
-				BI_FILES+=("$BI_FILE")
-			else
-				use_output "\e[1;31mInvalid file:\e[0m $BI_FILE"
-			fi
-			shift 2
+		--max-size) # Max file size.
+			case "$2" in
+				""|-*)
+					use_output "\e[1;31mValue required:\e[0m --max-size=123"
+					exit 1
+					;;
+				*)
+					MAX_SIZE=$(use_nicebytes "$2")
+					shift 2
+					;;
+			esac
 			;;
-		-d) # Deprecated: directory.
-			if [ -d "$2" ]; then
-				BI_DIR=$(realpath "$2")
-				while IFS= read -r -d $'\0'; do
-					BI_FILE=$(realpath "$REPLY")
-					BI_FILES+=("$BI_FILE")
-				done < <(find "$BI_DIR" -type f -regextype egrep -iregex '.*\.(jpe?g|png)' -print0 | sort)
-			else
-				use_output "\e[1;31mInvalid directory:\e[0m $BI_FILE"
-			fi
-			shift 2
+		--min-size) # Max file size.
+			case "$2" in
+				""|-*)
+					use_output "\e[1;31mValue required:\e[0m --min-size=123"
+					exit 1
+					;;
+				*)
+					MIN_SIZE=$(use_nicebytes "$2")
+					shift 2
+					;;
+			esac
+			;;
+		--skip-jpeg|--skip-jpg) # Do not process JPEG files.
+			SKIP_JPEG=true
+			shift
+			;;
+		--skip-png) # Do not process PNG files.
+			SKIP_PNG=true
+			shift
+			;;
+		-d|-f) # Deprecated. Paths will get checked below.
+			shift
 			;;
 		*) # Unknown option.
 			use_output "\e[1;31mInvalid option:\e[0m $1"
@@ -161,31 +245,61 @@ if [ $BI_HELP == true ]; then
 	exit 0
 fi
 
-# Process additional files and directories.
+
+
+# ----------------------------------------------------------------------
+# Find Files
+# ----------------------------------------------------------------------
+
+# First, optimize the find command.
+BI_FIND_COND=""
+
+# File types to search for.
+if [ "$SKIP_JPEG" == false ] && [ "$SKIP_PNG" == false ]; then
+	BI_FIND_COND+='\( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \)'
+elif [ "$SKIP_JPEG" == false ]; then
+	BI_FIND_COND+='\( -iname "*.jpg" -o -iname "*.jpeg" \)'
+elif [ "$SKIP_PNG" == false ]; then
+	BI_FIND_COND+='-iname "*.png"'
+else
+	use_output "\e[1;31mInvalid options:\e[0m --skip-jpeg and --skip-png cannot both be used."
+	exit 1
+fi
+
+# File sizes to search for.
+if [ "$MAX_SIZE" -gt 0 ] && [ "$MIN_SIZE" -gt 1 ]; then
+	BI_FIND_COND+=' \( -size +'$(($MIN_SIZE - 1))'c -a -size -'$(($MAX_SIZE + 1))'c \)'
+elif [ "$MAX_SIZE" -gt 0 ]; then
+	BI_FIND_COND+=' -size -'$(($MAX_SIZE + 1))c
+elif [ "$MIN_SIZE" -gt 1 ]; then
+	BI_FIND_COND+=' -size +'$(($MIN_SIZE - 1))c
+fi
+
+# Build a list of paths to search from. We want to try to do this all in
+# a single pass because performance becomes terrible if Bash arrays have
+# to be sorted or merged later on.
+BI_FIND_PATHS=()
 for i in "$@"; do
 	i=$(realpath "$i")
 	if [ -f "$i" ]; then
-		BI_FILES+=("$i")
+		BI_FIND_PATHS+=("\"$i\"")
 	elif [ -d "$i" ]; then
-		BI_DIR=$(realpath "$i")
-		while IFS= read -r -d $'\0'; do
-			BI_FILE=$(realpath "$REPLY")
-			BI_FILES+=("$BI_FILE")
-		done < <(find "$BI_DIR" -type f -regextype egrep -iregex '.*\.(jpe?g|png)' -print0 | sort)
+		BI_FIND_PATHS+=("\"$i\"")
 	else
-		use_output "\e[1;31mInvalid file:\e[0m $i"
+		use_output "\e[1;31mInvalid path:\e[0m $i"
 	fi
 done
+
+# Finally, search!
+while IFS= read -r -u3 -d $'\0' BI_LINE; do
+	BI_FILES+=("$BI_LINE")
+done 3< <(eval find "${BI_FIND_PATHS[@]}" $BI_FIND_COND -type f -print0 | sort -z)
 
 # Gotta have at least one file to look at.
 if [ ${#BI_FILES[@]} -lt 1 ]; then
 	use_output "\e[1;31mError:\e[0m Nothing to do."
 	exit 1
 fi
-
-# Sort results.
-readarray -t BI_SORTED < <(printf '%s\0' "${BI_FILES[@]}" | sort -z | xargs -0n1)
-BI_FILES=("${BI_SORTED[@]}")
 
 
 
@@ -206,34 +320,38 @@ BI_BINARIES[pngcrush]=$(command -v "pngcrush")
 BI_BINARIES[pngout]=$(command -v "pngout")
 
 BI_JPEG=()
-if [ "${BI_BINARIES[jpegtran]}" ]; then
-	BI_JPEG+=("jpegtran")
-fi
-if [ "${BI_BINARIES[jpegoptim]}" ]; then
-	BI_JPEG+=("jpegoptim")
-fi
-if [ "${BI_BINARIES[jpegrescan]}" ]; then
-	BI_JPEG+=("jpegrescan")
+if [ "$SKIP_JPEG" == false ]; then
+	if [ "${BI_BINARIES[jpegtran]}" ]; then
+		BI_JPEG+=("jpegtran")
+	fi
+	if [ "${BI_BINARIES[jpegoptim]}" ]; then
+		BI_JPEG+=("jpegoptim")
+	fi
+	if [ "${BI_BINARIES[jpegrescan]}" ]; then
+		BI_JPEG+=("jpegrescan")
+	fi
 fi
 
 BI_PNG=()
-if [ "${BI_BINARIES[optipng]}" ]; then
-	BI_PNG+=("optipng")
-fi
-if [ "${BI_BINARIES[advpng]}" ]; then
-	BI_PNG+=("advpng")
-fi
-if [ "${BI_BINARIES[pngcrush]}" ]; then
-	BI_PNG+=("pngcrush")
-fi
-if [ "${BI_BINARIES[pngout]}" ]; then
-	BI_PNG+=("pngout")
+if [ "$SKIP_PNG" == false ]; then
+	if [ "${BI_BINARIES[optipng]}" ]; then
+		BI_PNG+=("optipng")
+	fi
+	if [ "${BI_BINARIES[advpng]}" ]; then
+		BI_PNG+=("advpng")
+	fi
+	if [ "${BI_BINARIES[pngcrush]}" ]; then
+		BI_PNG+=("pngcrush")
+	fi
+	if [ "${BI_BINARIES[pngout]}" ]; then
+		BI_PNG+=("pngout")
+	fi
 fi
 
 
 
 # ----------------------------------------------------------------------
-# Loop it!
+# Crunch the files!
 # ----------------------------------------------------------------------
 
 BI_INDEX=0
@@ -249,9 +367,25 @@ for i in "${BI_FILES[@]}"; do
 	# We can only do something about JPEG and PNG files.
 	FILE_TYPE=$(file -b --mime-type "$i")
 	if [ "$FILE_TYPE" == "image/jpeg" ]; then
+		# Skip it?
+		if [ "$SKIP_JPEG" == true ]; then
+			use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(type)\e[0m"
+			use_output ""
+			use_output ""
+			continue
+		fi
+
 		FILE_EXT="jpg"
 		FILE_BINARIES=("${BI_JPEG[@]}")
 	elif [ "$FILE_TYPE" == "image/png" ]; then
+		# Skip it?
+		if [ "$SKIP_PNG" == true ]; then
+			use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(type)\e[0m"
+			use_output ""
+			use_output ""
+			continue
+		fi
+
 		FILE_EXT="png"
 		FILE_BINARIES=("${BI_PNG[@]}")
 	else
@@ -259,6 +393,42 @@ for i in "${BI_FILES[@]}"; do
 		use_output ""
 		use_output ""
 		continue;
+	fi
+
+
+
+	# Make sure we have programs to use.
+	if [ ${#BI_FILES[@]} -lt 1 ]; then
+		use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(no supported binaries)\e[0m"
+		use_output ""
+		use_output ""
+		continue;
+	fi
+
+
+
+	# Sort out some other file properties.
+	FILE_ORIGINAL="$i"
+	declare -i SIZE_ORIGINAL=$(wc -c < "$FILE_ORIGINAL")
+	FILE_USER=$(stat -c %U "$FILE_ORIGINAL")
+	FILE_GROUP=$(stat -c %G "$FILE_ORIGINAL")
+
+
+
+	# Is this file size within range?
+	# Too big?
+	if [ $MAX_SIZE -gt 0 ] && [ $MAX_SIZE -lt $SIZE_ORIGINAL ]; then
+		use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(size)\e[0m"
+		use_output ""
+		use_output ""
+		continue
+	fi
+	# Too small?
+	if [ $MIN_SIZE -gt 0 ] && [ $MIN_SIZE -gt $SIZE_ORIGINAL ]; then
+		use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(size)\e[0m"
+		use_output ""
+		use_output ""
+		continue
 	fi
 
 
@@ -283,22 +453,7 @@ for i in "${BI_FILES[@]}"; do
 
 
 
-	# Make sure we have programs to use.
-	if [ ${#BI_FILES[@]} -lt 1 ]; then
-		use_output "\e[1;31mError:\e[0m No $FILE_TYPE tools were be found."
-		use_output ""
-		use_output ""
-		continue;
-	fi
-
-
-
-	# Sort out file properties.
-	FILE_ORIGINAL="$i"
-	SIZE_ORIGINAL=$(wc -c < "$FILE_ORIGINAL")
-	FILE_USER=$(stat -c %U "$FILE_ORIGINAL")
-	FILE_GROUP=$(stat -c %G "$FILE_ORIGINAL")
-
+	# More file business.
 	BI_RANDOM=$(( ( RANDOM % 9999 ) + 1 ))
 	FILE_BEST="${BI_TMP}blobimage-best.${BI_RANDOM}.${FILE_EXT}"
 	FILE_WORKING="${BI_TMP}blobimage-working.${BI_RANDOM}.${FILE_EXT}"
@@ -361,8 +516,8 @@ for i in "${BI_FILES[@]}"; do
 
 
 		# What happened?"
-		SIZE_WORKING=$(wc -c < "$FILE_WORKING")
-		SIZE_BEST=$(wc -c < "$FILE_BEST")
+		declare -i SIZE_WORKING=$(wc -c < "$FILE_WORKING")
+		declare -i SIZE_BEST=$(wc -c < "$FILE_BEST")
 		SIZE_DIFF=$(awk "BEGIN {printf \"%.2f\n\", $SIZE_WORKING/$SIZE_ORIGINAL*100}")
 
 
@@ -398,7 +553,7 @@ for i in "${BI_FILES[@]}"; do
 
 
 	# Wrap up.
-	SIZE_BEST=$(wc -c < "$FILE_BEST")
+	declare -i SIZE_BEST=$(wc -c < "$FILE_BEST")
 	TIME_END=$(date +"%s.%N")
 	TIME_ELAPSED=$(awk "BEGIN {printf \"%.2f\n\", $TIME_END-$TIME_START}")
 	use_output ""
