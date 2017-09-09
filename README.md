@@ -28,7 +28,7 @@ Third-party utilities provide the actual compression magic. No single applicatio
 
 #### PNG
  * [advpng](http://www.advancemame.it/doc-advpng.html)
- * [OptiPNG](http://optipng.sourceforge.net/)
+ * [oxipng](https://github.com/shssoichiro/oxipng)
  * [pngcrush](http://pmt.sourceforge.net/pngcrush/)
  * [PNGOUT](http://www.jonof.id.au/kenutils)
 
