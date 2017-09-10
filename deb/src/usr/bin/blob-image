@@ -1,9 +1,10 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.3.0
+# version: 1.3.1
 #
-# Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
+# Copyright © 2017 Blobfolio, LLC <https://blobfolio.com>
+#
 # This work is free. You can redistribute it and/or modify it under the
 # terms of the Do What The Fuck You Want To Public License, Version 2.
 #
@@ -14,10 +15,46 @@
 #	-l	log file location
 #   -m	optimize for multi-core machines
 #   -q	quiet
+#
+#	--disable-advpng
+#	--disable-jpegoptim
+#	--disable-jpegrescan
+#	--disable-jpegtran
+#	--disable-oxipng
+#	--disable-pngcrush
+#	--disable-pngout
+#
+#	--max-age
+#	--min-age
 #	--max-size
 #	--min-size
+#
 #	--skip-jpeg / --skip-jpg
 #	--skip-png
+
+
+
+# ----------------------------------------------------------------------
+# Check Runtime Dependencies
+# ----------------------------------------------------------------------
+
+# Being a wrapper script, all the heavy lifting is done by hard-working
+# system programs like awk and sed. Before we do anything else, let's
+# make sure each of these can be found.
+DEPENDENCIES=("awk" "bc" "cat" "date" "file" "find" "getopt" "realpath" "sed" "sort" "stat" "touch" "tr" "wc")
+MISSING_DEP=false
+for i in "${DEPENDENCIES[@]}"; do
+	DEP_PATH=$(command -v "$i")
+	if [ ! "$DEP_PATH" ]; then
+		MISSING_DEP=true
+		>&2 echo "Error: missing system program $i"
+	fi
+done
+if [ "$MISSING_DEP" == true ]; then
+	exit 1
+fi
+
+# ----------------------------------------------------------------------
 
 
 
@@ -34,10 +71,23 @@ BI_MT=false							# Multi-threading.
 BI_QUIET=false						# Suppress stdout.
 BI_SELF="$0"						# Script location.
 BI_TMP="/dev/shm/"					# Working directory.
+
+DISABLE_ADVPNG=false
+DISABLE_JPEGOPTIM=false
+DISABLE_JPEGRESCAN=false
+DISABLE_JPEGTRAN=false
+DISABLE_OXIPNG=false
+DISABLE_PNGCRUSH=false
+DISABLE_PNGOUT=false
+
 SKIP_JPEG=false						# Skip JPEG files.
 SKIP_PNG=false						# Skip PNG files.
+
+declare -i MAX_AGE=0				# Maximum age (minutes).
+declare -i MIN_AGE=0				# Minimum age (minutes).
 declare -i MAX_SIZE=0				# Maximum size to scan.
 declare -i MIN_SIZE=0				# Minimum size to scan.
+
 TOTAL_TIME_START=$(date +"%s.%N")
 
 BI_FILES=()							# Files to crunch.
@@ -55,7 +105,7 @@ fi
 # @param string Message.
 # @echo string|void Message.
 #
-use_output(){
+bi_echo(){
 	# Echo if we aren't being quiet.
 	if [ "$BI_QUIET" == false ]; then
 		local BI_LINE=$1
@@ -77,13 +127,12 @@ use_output(){
 # @param mixed Size w/ or w/o unit.
 # @echo int Bytes.
 #
-use_nicebytes() {
+bi_nicebytes() {
 	local RAW=$1
 	declare -i VALUE=0
 
 	RAW=$(echo "$RAW" | sed 's/[^0-9gGmMkKbB]//g')
 	if [ ! "$RAW" ]; then
-		echo 'empty'
 		RAW=0
 	fi
 
@@ -103,59 +152,107 @@ use_nicebytes() {
 }
 
 #
+# ABS Int
+#
+# Ensure we have an absolute integer.
+#
+# @param mixed Value.
+# @echo int Value.
+#
+bi_absint() {
+	local RAW=$1
+	declare -i VALUE=0
+
+	RAW=$(echo "$RAW" | sed 's/[^0-9]//g')
+	if [ ! "$RAW" ]; then
+		RAW=0
+	fi
+
+	VALUE="$RAW"
+
+	if [ ${VALUE//\*/} -lt 0 ]; then
+		VALUE=$(( 0 - $VALUE ))
+	fi
+
+	echo $VALUE
+}
+
+#
 # Help
 #
 # Print help and use dialogue.
 #
 # @echo string Help.
 #
-use_help(){
+bi_help(){
 	BI_QUIET=false
 
-	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.3.0"
-	use_output ""
-	use_output "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
-	use_output "prioritizes compression over speed, running each image through a"
-	use_output "battery of specialized binaries (if installed)."
-	use_output ""
-	use_output "\e[1;34mJPEG:\e[0m"
-	use_output "jpegtran    \e[35mhttp://jpegclub.org/jpegtran/\e[0m"
-	use_output "jpegoptim   \e[35mhttps://github.com/tjko/jpegoptim\e[0m"
-	use_output "jpegrescan  \e[35mhttps://github.com/kud/jpegrescan\e[0m"
-	use_output ""
-	use_output "\e[1;34mPNG:\e[0m"
-	use_output "oxipng      \e[35mhttps://github.com/shssoichiro/oxipng\e[0m"
-	use_output "advpng      \e[35mhttp://www.advancemame.it/doc-advpng.html\e[0m"
-	use_output "pngcrush    \e[35mhttps://pmt.sourceforge.io/pngcrush/\e[0m"
-	use_output "pngout      \e[35mhttp://advsys.net/ken/utils.htm\e[0m"
-	use_output ""
-	use_output "\e[1;34mUse:\e[0m"
-	use_output "blob-image -args [file/dir] [file/dir]…"
-	use_output ""
-	use_output "\e[1;34mOptions:\e[0m"
-	use_output "\e[1m-c\e[0m, \e[1m--color\e[0m"
-	use_output "    Colorize output."
-	use_output "\e[1m-d\e[0m, \e[1m--dry-run\e[0m"
-	use_output "    Test compression without overriding original file."
-	use_output "\e[1m-h\e[0m, \e[1m--help\e[0m"
-	use_output "    Display this documentation."
-	use_output "\e[1m-l\e[0m, \e[1m--log\e[0m=/path/to/log"
-	use_output "    Log results to this file."
-	use_output "    Default: /var/log/blob-image.log"
-	use_output "\e[1m--max-size\e[0m=XX"
-	use_output "    Files larger than this value will be skipped. Value should be in"
-	use_output "    bytes. K, M, and G units are allowed."
-	use_output "\e[1m--min-size\e[0m=XX"
-	use_output "    Files smaller than this value will be skipped. Value should be in"
-	use_output "    bytes. K, M, and G units are allowed."
-	use_output "\e[1m-m\e[0m, \e[1m--multithreaded\e[0m"
-	use_output "    Optimize performance for multithreaded systems, where possible."
-	use_output "\e[1m-q\e[0m, \e[1m--quiet\e[0m"
-	use_output "    Suppress STDOUT."
-	use_output "\e[1m--skip-jpeg\e[0m"
-	use_output "    Do not process any JPEG images."
-	use_output "\e[1m--skip-png\e[0m"
-	use_output "    Do not process any PNG images."
+	bi_echo "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.3.1"
+	bi_echo ""
+	bi_echo "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
+	bi_echo "prioritizes compression over speed, running each image through a"
+	bi_echo "battery of specialized binaries (if installed)."
+	bi_echo ""
+	bi_echo "\e[1;34mJPEG:\e[0m"
+	bi_echo "jpegoptim   \e[35mhttps://github.com/tjko/jpegoptim\e[0m"
+	bi_echo "jpegrescan  \e[35mhttps://github.com/kud/jpegrescan\e[0m"
+	bi_echo "jpegtran    \e[35mhttps://github.com/mozilla/mozjpeg\e[0m"
+	bi_echo ""
+	bi_echo "\e[1;34mPNG:\e[0m"
+	bi_echo "advpng      \e[35mhttp://www.advancemame.it/doc-advpng.html\e[0m"
+	bi_echo "oxipng      \e[35mhttps://github.com/shssoichiro/oxipng\e[0m"
+	bi_echo "pngcrush    \e[35mhttps://pmt.sourceforge.io/pngcrush/\e[0m"
+	bi_echo "pngout      \e[35mhttp://advsys.net/ken/utils.htm\e[0m"
+	bi_echo ""
+	bi_echo "\e[1;34mUse:\e[0m"
+	bi_echo "blob-image -args [file/dir] [file/dir]…"
+	bi_echo ""
+	bi_echo "\e[1;34mOptions:\e[0m"
+	bi_echo "\e[1m-c\e[0m, \e[1m--color\e[0m"
+	bi_echo "    Colorize output."
+	bi_echo "\e[1m-d\e[0m, \e[1m--dry-run\e[0m"
+	bi_echo "    Test compression without overriding original file."
+	bi_echo "\e[1m-h\e[0m, \e[1m--help\e[0m"
+	bi_echo "    Display this documentation."
+	bi_echo "\e[1m-l\e[0m, \e[1m--log\e[0m=/path/to/log"
+	bi_echo "    Log results to this file."
+	bi_echo "    Default: /var/log/blob-image.log"
+	bi_echo "\e[1m--max-age\e[0m=XX"
+	bi_echo "    Files older than this (in minutes) will be skipped."
+	bi_echo "    Modification time is used to determine age."
+	bi_echo "\e[1m--min-age\e[0m=XX"
+	bi_echo "    Files younger than this (in minutes) will be skipped."
+	bi_echo "    Modification time is used to determine age."
+	bi_echo "\e[1m--max-size\e[0m=XX"
+	bi_echo "    Files larger than this value will be skipped. Value should be in"
+	bi_echo "    bytes. K, M, and G units are allowed."
+	bi_echo "\e[1m--min-size\e[0m=XX"
+	bi_echo "    Files smaller than this value will be skipped. Value should be in"
+	bi_echo "    bytes. K, M, and G units are allowed."
+	bi_echo "\e[1m-m\e[0m, \e[1m--multithreaded\e[0m"
+	bi_echo "    Optimize performance for multithreaded systems, where possible."
+	bi_echo "\e[1m-q\e[0m, \e[1m--quiet\e[0m"
+	bi_echo "    Suppress STDOUT."
+	bi_echo ""
+	bi_echo "\e[1m--disable-advpng\e[0m"
+	bi_echo "    Do not execute advpng, even if installed."
+	bi_echo "\e[1m--disable-jpegoptim\e[0m"
+	bi_echo "    Do not execute jpegoptim, even if installed."
+	bi_echo "\e[1m--disable-jpegrescan\e[0m"
+	bi_echo "    Do not execute jpegrescan, even if installed."
+	bi_echo "\e[1m--disable-jpegtran\e[0m"
+	bi_echo "    Do not execute jpegtran, even if installed."
+	bi_echo "\e[1m--disable-oxipng\e[0m"
+	bi_echo "    Do not execute oxipng, even if installed."
+	bi_echo "\e[1m--disable-pngcrush\e[0m"
+	bi_echo "    Do not execute pngcrush, even if installed."
+	bi_echo "\e[1m--disable-pngout\e[0m"
+	bi_echo "    Do not execute pngout, even if installed."
+	bi_echo ""
+	bi_echo "\e[1m--skip-jpeg\e[0m"
+	bi_echo "    Do not process any JPEG images."
+	bi_echo "\e[1m--skip-png\e[0m"
+	bi_echo "    Do not process any PNG images."
 }
 
 
@@ -165,7 +262,7 @@ use_help(){
 # ----------------------------------------------------------------------
 
 # Flags and options.
-BI_ARGS=$(getopt -q -l "color,dry-run,help,log,multithreaded,quiet,max-size:,min-size:,skip-jpeg,skip-jpg,skip-png" -o "cdhl:mq" -- "$@")
+BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,dry-run,help,log,max-age:,min-age:,max-size:,min-size:,multithreaded,quiet,skip-jpeg,skip-jpg,skip-png" -o "cdhl:mq" -- "$@")
 eval set -- "$BI_ARGS"
 while true ; do
 	case "$1" in
@@ -175,6 +272,34 @@ while true ; do
 			;;
 		-c|--color) # Colorize output.
 			BI_COLOR=true
+			shift
+			;;
+		--disable-advpng) # Disable advpng.
+			DISABLE_ADVPNG=true
+			shift
+			;;
+		--disable-jpegoptim) # Disable jpegoptim.
+			DISABLE_JPEGOPTIM=true
+			shift
+			;;
+		--disable-jpegrescan) # Disable jpegrescan.
+			DISABLE_JPEGRESCAN=true
+			shift
+			;;
+		--disable-jpegtran) # Disable jpegtran.
+			DISABLE_JPEGTRAN=true
+			shift
+			;;
+		--disable-oxipng) # Disable oxipng.
+			DISABLE_OXIPNG=true
+			shift
+			;;
+		--disable-pngcrush) # Disable pngcrush.
+			DISABLE_PNGCRUSH=true
+			shift
+			;;
+		--disable-pngout) # Disable pngout.
+			DISABLE_PNGOUT=true
 			shift
 			;;
 		-d|--dry-run) # Dry run.
@@ -188,7 +313,7 @@ while true ; do
 		-l|--log)
 			case "$2" in
 				""|-*)
-					use_output "\e[1;31mValue required:\e[0m --log=/something/file.log"
+					bi_echo "\e[1;31mValue required:\e[0m --log=/something/file.log"
 					exit 1
 					;;
 				*)
@@ -205,14 +330,38 @@ while true ; do
 			BI_QUIET=true
 			shift
 			;;
-		--max-size) # Max file size.
+		--max-age) # Max file age.
 			case "$2" in
 				""|-*)
-					use_output "\e[1;31mValue required:\e[0m --max-size=123"
+					bi_echo "\e[1;31mValue required:\e[0m --max-age=123"
 					exit 1
 					;;
 				*)
-					MAX_SIZE=$(use_nicebytes "$2")
+					MAX_AGE=$(bi_absint "$2")
+					shift 2
+					;;
+			esac
+			;;
+		--min-age) # Max file age.
+			case "$2" in
+				""|-*)
+					bi_echo "\e[1;31mValue required:\e[0m --min-age=123"
+					exit 1
+					;;
+				*)
+					MIN_AGE=$(bi_absint "$2")
+					shift 2
+					;;
+			esac
+			;;
+		--max-size) # Max file size.
+			case "$2" in
+				""|-*)
+					bi_echo "\e[1;31mValue required:\e[0m --max-size=123"
+					exit 1
+					;;
+				*)
+					MAX_SIZE=$(bi_nicebytes "$2")
 					shift 2
 					;;
 			esac
@@ -220,11 +369,11 @@ while true ; do
 		--min-size) # Max file size.
 			case "$2" in
 				""|-*)
-					use_output "\e[1;31mValue required:\e[0m --min-size=123"
+					bi_echo "\e[1;31mValue required:\e[0m --min-size=123"
 					exit 1
 					;;
 				*)
-					MIN_SIZE=$(use_nicebytes "$2")
+					MIN_SIZE=$(bi_nicebytes "$2")
 					shift 2
 					;;
 			esac
@@ -241,8 +390,8 @@ while true ; do
 			shift
 			;;
 		*) # Unknown option.
-			use_output "\e[1;31mInvalid option:\e[0m $1"
-			use_help
+			bi_echo "\e[1;31mInvalid option:\e[0m $1"
+			bi_help
 			exit 1
 			;;
 	esac
@@ -250,7 +399,7 @@ done
 
 # Load help?
 if [ $BI_HELP == true ]; then
-	use_help
+	bi_help
 	exit 0
 fi
 
@@ -271,7 +420,7 @@ elif [ "$SKIP_JPEG" == false ]; then
 elif [ "$SKIP_PNG" == false ]; then
 	BI_FIND_COND+='-iname "*.png"'
 else
-	use_output "\e[1;31mInvalid options:\e[0m --skip-jpeg and --skip-png cannot both be used."
+	bi_echo "\e[1;31mInvalid options:\e[0m --skip-jpeg and --skip-png cannot both be used."
 	exit 1
 fi
 
@@ -282,6 +431,15 @@ elif [ "$MAX_SIZE" -gt 0 ]; then
 	BI_FIND_COND+=' -size -'$(($MAX_SIZE + 1))c
 elif [ "$MIN_SIZE" -gt 1 ]; then
 	BI_FIND_COND+=' -size +'$(($MIN_SIZE - 1))c
+fi
+
+# File ages to search for.
+if [ "$MAX_AGE" -gt 0 ] && [ "$MIN_AGE" -gt 0 ]; then
+	BI_FIND_COND+=' \( -mmin +'$(($MIN_AGE))' -a -mmin -'$(($MAX_AGE))' \)'
+elif [ "$MAX_AGE" -gt 0 ]; then
+	BI_FIND_COND+=' -mmin -'$(($MAX_AGE))
+elif [ "$MIN_AGE" -gt 0 ]; then
+	BI_FIND_COND+=' -mmin +'$(($MIN_AGE))
 fi
 
 # Build a list of paths to search from. We want to try to do this all in
@@ -295,7 +453,7 @@ for i in "$@"; do
 	elif [ -d "$i" ]; then
 		BI_FIND_PATHS+=("\"$i\"")
 	else
-		use_output "\e[1;31mInvalid path:\e[0m $i"
+		bi_echo "\e[1;31mInvalid path:\e[0m $i"
 	fi
 done
 
@@ -306,7 +464,7 @@ done 3< <(eval find "${BI_FIND_PATHS[@]}" $BI_FIND_COND -type f -print0 | sort -
 
 # Gotta have at least one file to look at.
 if [ ${#BI_FILES[@]} -lt 1 ]; then
-	use_output "\e[1;31mError:\e[0m Nothing to do."
+	bi_echo "\e[1;31mError:\e[0m Nothing to do."
 	exit 1
 fi
 
@@ -330,29 +488,29 @@ BI_BINARIES[pngout]=$(command -v "pngout")
 
 BI_JPEG=()
 if [ "$SKIP_JPEG" == false ]; then
-	if [ "${BI_BINARIES[jpegtran]}" ]; then
+	if [ "$DISABLE_JPEGTRAN" == false ] && [ "${BI_BINARIES[jpegtran]}" ]; then
 		BI_JPEG+=("jpegtran")
 	fi
-	if [ "${BI_BINARIES[jpegoptim]}" ]; then
+	if [ "$DISABLE_JPEGOPTIM" == false ] && [ "${BI_BINARIES[jpegoptim]}" ]; then
 		BI_JPEG+=("jpegoptim")
 	fi
-	if [ "${BI_BINARIES[jpegrescan]}" ]; then
+	if [ "$DISABLE_JPEGRESCAN" == false ] && [ "${BI_BINARIES[jpegrescan]}" ]; then
 		BI_JPEG+=("jpegrescan")
 	fi
 fi
 
 BI_PNG=()
 if [ "$SKIP_PNG" == false ]; then
-	if [ "${BI_BINARIES[advpng]}" ]; then
+	if [ "$DISABLE_ADVPNG" == false ] && [ "${BI_BINARIES[advpng]}" ]; then
 		BI_PNG+=("advpng")
 	fi
-	if [ "${BI_BINARIES[pngcrush]}" ]; then
+	if [ "$DISABLE_PNGCRUSH" == false ] && [ "${BI_BINARIES[pngcrush]}" ]; then
 		BI_PNG+=("pngcrush")
 	fi
-	if [ "${BI_BINARIES[pngout]}" ]; then
+	if [ "$DISABLE_PNGOUT" == false ] && [ "${BI_BINARIES[pngout]}" ]; then
 		BI_PNG+=("pngout")
 	fi
-	if [ "${BI_BINARIES[oxipng]}" ]; then
+	if [ "$DISABLE_OXIPNG" == false ] && [ "${BI_BINARIES[oxipng]}" ]; then
 		BI_PNG+=("oxipng")
 	fi
 fi
@@ -363,14 +521,14 @@ fi
 # Header
 # ----------------------------------------------------------------------
 
-use_output ""
-use_output " _     _       _           _                             "
-use_output "| |__ | | ___ | |__       (_)_ __ ___   __ _  __ _  ___  "
-use_output "| '_ \| |/ _ \| '_ \ _____| | '_ \` _ \ / _\` |/ _\` |/ _ \ "
-use_output "| |_) | | (_) | |_) |_____| | | | | | | (_| | (_| |  __/ "
-use_output "|_.__/|_|\___/|_.__/      |_|_| |_| |_|\__,_|\__, |\___| "
-use_output "                                             |___/       "
-use_output ""
+bi_echo ""
+bi_echo " _     _       _           _                             "
+bi_echo "| |__ | | ___ | |__       (_)_ __ ___   __ _  __ _  ___  "
+bi_echo "| '_ \| |/ _ \| '_ \ _____| | '_ \` _ \ / _\` |/ _\` |/ _ \ "
+bi_echo "| |_) | | (_) | |_) |_____| | | | | | | (_| | (_| |  __/ "
+bi_echo "|_.__/|_|\___/|_.__/      |_|_| |_| |_|\__,_|\__, |\___| "
+bi_echo "                                             |___/       "
+bi_echo ""
 
 
 
@@ -395,9 +553,9 @@ for i in "${BI_FILES[@]}"; do
 	if [ "$FILE_TYPE" == "image/jpeg" ]; then
 		# Skip it?
 		if [ "$SKIP_JPEG" == true ]; then
-			use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(type)\e[0m"
-			use_output ""
-			use_output ""
+			bi_echo "\e[1;33mSkipping file:\e[0m $i \e[90m(type)\e[0m"
+			bi_echo ""
+			bi_echo ""
 			continue
 		fi
 
@@ -406,18 +564,18 @@ for i in "${BI_FILES[@]}"; do
 	elif [ "$FILE_TYPE" == "image/png" ]; then
 		# Skip it?
 		if [ "$SKIP_PNG" == true ]; then
-			use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(type)\e[0m"
-			use_output ""
-			use_output ""
+			bi_echo "\e[1;33mSkipping file:\e[0m $i \e[90m(type)\e[0m"
+			bi_echo ""
+			bi_echo ""
 			continue
 		fi
 
 		FILE_EXT="png"
 		FILE_BINARIES=("${BI_PNG[@]}")
 	else
-		use_output "\e[1;31mInvalid file:\e[0m $i"
-		use_output ""
-		use_output ""
+		bi_echo "\e[1;31mInvalid file:\e[0m $i"
+		bi_echo ""
+		bi_echo ""
 		continue;
 	fi
 
@@ -425,9 +583,9 @@ for i in "${BI_FILES[@]}"; do
 
 	# Make sure we have programs to use.
 	if [ ${#BI_FILES[@]} -lt 1 ]; then
-		use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(no supported binaries)\e[0m"
-		use_output ""
-		use_output ""
+		bi_echo "\e[1;33mSkipping file:\e[0m $i \e[90m(no supported binaries)\e[0m"
+		bi_echo ""
+		bi_echo ""
 		continue;
 	fi
 
@@ -444,16 +602,16 @@ for i in "${BI_FILES[@]}"; do
 	# Is this file size within range?
 	# Too big?
 	if [ $MAX_SIZE -gt 0 ] && [ $MAX_SIZE -lt $SIZE_ORIGINAL ]; then
-		use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(size)\e[0m"
-		use_output ""
-		use_output ""
+		bi_echo "\e[1;33mSkipping file:\e[0m $i \e[90m(size)\e[0m"
+		bi_echo ""
+		bi_echo ""
 		continue
 	fi
 	# Too small?
 	if [ $MIN_SIZE -gt 0 ] && [ $MIN_SIZE -gt $SIZE_ORIGINAL ]; then
-		use_output "\e[1;33mSkipping file:\e[0m $i \e[90m(size)\e[0m"
-		use_output ""
-		use_output ""
+		bi_echo "\e[1;33mSkipping file:\e[0m $i \e[90m(size)\e[0m"
+		bi_echo ""
+		bi_echo ""
 		continue
 	fi
 
@@ -475,7 +633,7 @@ for i in "${BI_FILES[@]}"; do
 		BI_PAD=""
 	fi
 	BI_TITLE="\e[1;34m$BI_TITLE\e[0m \e[90m$BI_PAD $BI_PROGRESS\e[0m"
-	use_output "$BI_TITLE"
+	bi_echo "$BI_TITLE"
 
 
 
@@ -492,15 +650,15 @@ for i in "${BI_FILES[@]}"; do
 	# Populate the best with the working file.
 	cp "$FILE_ORIGINAL" "$FILE_BEST"
 
-	use_output "\e[1;90mType:\e[0m $FILE_TYPE"
-	use_output "\e[1;90mSize:\e[0m $SIZE_ORIGINAL bytes"
+	bi_echo "\e[1;90mType:\e[0m $FILE_TYPE"
+	bi_echo "\e[1;90mSize:\e[0m $SIZE_ORIGINAL bytes"
 
 
 
 	# Crunch crunch crunch!
 	for i in "${FILE_BINARIES[@]}"; do
-		use_output ""
-		use_output "\e[1m$i\e[0m"
+		bi_echo ""
+		bi_echo "\e[1m$i\e[0m"
 
 		cp "$FILE_BEST" "$FILE_WORKING"
 
@@ -525,7 +683,7 @@ for i in "${BI_FILES[@]}"; do
 				eval "\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				;;
 			oxipng)
-				eval "\"${BI_BINARIES[$i]}\" -Zsq -o 6 \"$FILE_WORKING\""
+				eval "\"${BI_BINARIES[$i]}\" -Zsq -o 4 -i 0 \"$FILE_WORKING\""
 				;;
 			pngcrush)
 				if [ "$BI_MT" == false ]; then
@@ -561,11 +719,11 @@ for i in "${BI_FILES[@]}"; do
 
 		# Report change.
 		if [ $SIZE_WORKING -lt $SIZE_ORIGINAL ]; then
-			use_output "\e[1;90mSize:\e[0m $SIZE_WORKING bytes \e[32m($SIZE_DIFF%)\e[0m"
+			bi_echo "\e[1;90mSize:\e[0m $SIZE_WORKING bytes \e[32m($SIZE_DIFF%)\e[0m"
 		elif [ $SIZE_WORKING -eq $SIZE_ORIGINAL ]; then
-			use_output "\e[1;90mSize:\e[0m $SIZE_WORKING bytes \e[33m($SIZE_DIFF%)\e[0m"
+			bi_echo "\e[1;90mSize:\e[0m $SIZE_WORKING bytes \e[33m($SIZE_DIFF%)\e[0m"
 		else
-			use_output "\e[1;90mSize:\e[0m $SIZE_WORKING bytes \e[31m($SIZE_DIFF%)\e[0m"
+			bi_echo "\e[1;90mSize:\e[0m $SIZE_WORKING bytes \e[31m($SIZE_DIFF%)\e[0m"
 		fi
 
 
@@ -584,8 +742,8 @@ for i in "${BI_FILES[@]}"; do
 	declare -i SIZE_BEST=$(wc -c < "$FILE_BEST")
 	TIME_END=$(date +"%s.%N")
 	TIME_ELAPSED=$(awk "BEGIN {printf \"%.2f\n\", $TIME_END-$TIME_START}")
-	use_output ""
-	use_output "\e[1;90mDone:\e[0m $TIME_ELAPSED seconds"
+	bi_echo ""
+	bi_echo "\e[1;90mDone:\e[0m $TIME_ELAPSED seconds"
 
 	if [ "$BI_DRY" == false ]; then
 		if [ $SIZE_BEST -lt $SIZE_ORIGINAL ]; then
@@ -593,9 +751,9 @@ for i in "${BI_FILES[@]}"; do
 			TOTAL_SIZE_BEST=$(( $TOTAL_SIZE_BEST + $SIZE_BEST ))
 
 			SIZE_DIFF=$(awk "BEGIN {printf \"%.2f\n\", $SIZE_BEST/$SIZE_ORIGINAL*100}")
-			use_output "\e[1;90mBest:\e[0m $SIZE_BEST bytes \e[32m($SIZE_DIFF%)\e[0m"
+			bi_echo "\e[1;90mBest:\e[0m $SIZE_BEST bytes \e[32m($SIZE_DIFF%)\e[0m"
 		else
-			use_output "\e[1;90mNo change.\e[0m"
+			bi_echo "\e[1;90mNo change.\e[0m"
 		fi
 	fi
 
@@ -606,7 +764,7 @@ for i in "${BI_FILES[@]}"; do
 	# Log the result.
 	if [ ! -f "$BI_LOG" ]; then
 		if [ ! $(touch "$BI_LOG" 2>/dev/null) ]; then
-			use_output "\e[1;31mLogging failed:\e[0m could not create $BI_LOG"
+			bi_echo "\e[1;31mLogging failed:\e[0m could not create $BI_LOG"
 		fi
 	fi
 
@@ -616,8 +774,8 @@ for i in "${BI_FILES[@]}"; do
 
 
 
-	use_output ""
-	use_output ""
+	bi_echo ""
+	bi_echo ""
 done
 
 
@@ -626,31 +784,31 @@ done
 # Footer
 # ----------------------------------------------------------------------
 
-use_output " ____                   _ "
-use_output "|  _ \  ___  _ __   ___| | "
-use_output "| | | |/ _ \| '_ \ / _ \ | "
-use_output "| |_| | (_) | | | |  __/_| "
-use_output "|____/ \___/|_| |_|\___(_) "
-use_output ""
+bi_echo " ____                   _ "
+bi_echo "|  _ \  ___  _ __   ___| | "
+bi_echo "| | | |/ _ \| '_ \ / _ \ | "
+bi_echo "| |_| | (_) | | | |  __/_| "
+bi_echo "|____/ \___/|_| |_|\___(_) "
+bi_echo ""
 
-use_output "\e[1mImages:\e[0m  ${#BI_FILES[@]}"
+bi_echo "\e[1mImages:\e[0m  ${#BI_FILES[@]}"
 
 TOTAL_TIME_END=$(date +"%s.%N")
 TOTAL_TIME_ELAPSED=$(awk "BEGIN {printf \"%.2f\n\", $TOTAL_TIME_END-$TOTAL_TIME_START}")
-use_output "\e[1mRuntime:\e[0m $TOTAL_TIME_ELAPSED seconds"
+bi_echo "\e[1mRuntime:\e[0m $TOTAL_TIME_ELAPSED seconds"
 
 if [ $TOTAL_SIZE_BEST -lt $TOTAL_SIZE_ORIGINAL ]; then
 	TOTAL_SAVED=$(( $TOTAL_SIZE_ORIGINAL - $TOTAL_SIZE_BEST ))
-	use_output "\e[1mSaved:\e[0m   \e[1;32m$TOTAL_SAVED bytes\e[0m"
+	bi_echo "\e[1mSaved:\e[0m   \e[1;32m$TOTAL_SAVED bytes\e[0m"
 else
-	use_output "\e[1mSaved:\e[0m   \e[1;33m0 bytes\e[0m"
+	bi_echo "\e[1mSaved:\e[0m   \e[1;33m0 bytes\e[0m"
 fi
 
 if [ "$BI_DRY" == true ]; then
-	use_output "\e[1mDry Run:\e[0m No files were overridden."
+	bi_echo "\e[1mDry Run:\e[0m No files were overridden."
 fi
 
-use_output ""
+bi_echo ""
 
 
 
