@@ -1,8 +1,8 @@
 Package: blob-image
-Version: 1.2.0
+Version: 1.3.0
 Section: base
 Priority: optional
 Architecture: amd64
-Depends: advancecomp, jpegoptim, optipng, pngcrush, libfile-slurp-perl, libjpeg-turbo-progs, libturbojpeg1 | libjpeg62-turbo | libjpeg-turbo8, pngout, jpegrescan-perl, mozjpeg | jpegtran
+Depends: advancecomp, jpegoptim, oxipng, pngcrush, libfile-slurp-perl, libjpeg-turbo-progs, libturbojpeg1 | libjpeg62-turbo | libjpeg-turbo8, pngout, jpegrescan-perl, mozjpeg | jpegtran
 Maintainer: Blobfolio LLC <hello@blobfolio.com>
 Description: Brute-force lossless image compression for JPEG and PNG

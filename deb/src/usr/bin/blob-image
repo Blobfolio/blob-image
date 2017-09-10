@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.2.0
+# version: 1.3.0
 #
 # Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
 # This work is free. You can redistribute it and/or modify it under the
@@ -112,7 +112,7 @@ use_nicebytes() {
 use_help(){
 	BI_QUIET=false
 
-	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.2.0"
+	use_output "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.3.0"
 	use_output ""
 	use_output "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
 	use_output "prioritizes compression over speed, running each image through a"
@@ -124,7 +124,7 @@ use_help(){
 	use_output "jpegrescan  \e[35mhttps://github.com/kud/jpegrescan\e[0m"
 	use_output ""
 	use_output "\e[1;34mPNG:\e[0m"
-	use_output "optipng     \e[35mhttp://optipng.sourceforge.net/\e[0m"
+	use_output "oxipng      \e[35mhttps://github.com/shssoichiro/oxipng\e[0m"
 	use_output "advpng      \e[35mhttp://www.advancemame.it/doc-advpng.html\e[0m"
 	use_output "pngcrush    \e[35mhttps://pmt.sourceforge.io/pngcrush/\e[0m"
 	use_output "pngout      \e[35mhttp://advsys.net/ken/utils.htm\e[0m"
@@ -324,7 +324,7 @@ BI_BINARIES[jpegtran]=$(command -v "/opt/mozjpeg/bin/jpegtran") # Prefer mozjpeg
 if [ ! "${BI_BINARIES[jpegtran]}" ]; then
 	BI_BINARIES[jpegtran]=$(command -v "jpegtran")
 fi
-BI_BINARIES[optipng]=$(command -v "optipng")
+BI_BINARIES[oxipng]=$(command -v "oxipng")
 BI_BINARIES[pngcrush]=$(command -v "pngcrush")
 BI_BINARIES[pngout]=$(command -v "pngout")
 
@@ -343,9 +343,6 @@ fi
 
 BI_PNG=()
 if [ "$SKIP_PNG" == false ]; then
-	if [ "${BI_BINARIES[optipng]}" ]; then
-		BI_PNG+=("optipng")
-	fi
 	if [ "${BI_BINARIES[advpng]}" ]; then
 		BI_PNG+=("advpng")
 	fi
@@ -354,6 +351,9 @@ if [ "$SKIP_PNG" == false ]; then
 	fi
 	if [ "${BI_BINARIES[pngout]}" ]; then
 		BI_PNG+=("pngout")
+	fi
+	if [ "${BI_BINARIES[oxipng]}" ]; then
+		BI_PNG+=("oxipng")
 	fi
 fi
 
@@ -524,8 +524,8 @@ for i in "${BI_FILES[@]}"; do
 			jpegtran)
 				eval "\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				;;
-			optipng)
-				eval "\"${BI_BINARIES[$i]}\" -quiet -force -o7 \"$FILE_WORKING\""
+			oxipng)
+				eval "\"${BI_BINARIES[$i]}\" -Zsq -o 6 \"$FILE_WORKING\""
 				;;
 			pngcrush)
 				if [ "$BI_MT" == false ]; then
