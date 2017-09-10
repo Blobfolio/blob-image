@@ -85,8 +85,10 @@ The following runtime flags are available:
 | -d, --dry-run | Test compression without saving changes. |
 | -h, --help  | Display documentation. |
 | -l, --log *=/path*   | Log results to this path. Default: `/var/log/blob-image.log` |
-| --max-size *=123* | Ignore files larger than this value in bytes. `K`, `M`, `G` units are allowed. | 
-| --min-size *=123* | Ignore files smaller than this value in bytes. `K`, `M`, `G` units are allowed. |
+| --max-age *=123* | Ignore files older (mtime) than this value (in minutes). |
+| --min-age *=123* | Ignore files younger (mtime) than this value (in minutes). |
+| --max-size *=123* | Ignore files larger than this value (in bytes). `K`, `M`, `G` units are allowed. | 
+| --min-size *=123* | Ignore files smaller than this value (in bytes). `K`, `M`, `G` units are allowed. |
 | -m, --multithreaded | Optimize performance for multithreaded systems. |
 | -q, --quiet | Do not throw anything to STDOUT. |
 | --disable-advpng | Do not execute advpng. |

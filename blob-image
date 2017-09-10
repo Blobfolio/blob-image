@@ -15,6 +15,7 @@
 #	-l	log file location
 #   -m	optimize for multi-core machines
 #   -q	quiet
+#
 #	--disable-advpng
 #	--disable-jpegoptim
 #	--disable-jpegrescan
@@ -22,8 +23,12 @@
 #	--disable-oxipng
 #	--disable-pngcrush
 #	--disable-pngout
+#
+#	--max-age
+#	--min-age
 #	--max-size
 #	--min-size
+#
 #	--skip-jpeg / --skip-jpg
 #	--skip-png
 
@@ -78,8 +83,11 @@ DISABLE_PNGOUT=false
 SKIP_JPEG=false						# Skip JPEG files.
 SKIP_PNG=false						# Skip PNG files.
 
+declare -i MAX_AGE=0				# Maximum age (minutes).
+declare -i MIN_AGE=0				# Minimum age (minutes).
 declare -i MAX_SIZE=0				# Maximum size to scan.
 declare -i MIN_SIZE=0				# Minimum size to scan.
+
 TOTAL_TIME_START=$(date +"%s.%N")
 
 BI_FILES=()							# Files to crunch.
@@ -125,7 +133,6 @@ bi_nicebytes() {
 
 	RAW=$(echo "$RAW" | sed 's/[^0-9gGmMkKbB]//g')
 	if [ ! "$RAW" ]; then
-		echo 'empty'
 		RAW=0
 	fi
 
@@ -142,6 +149,32 @@ bi_nicebytes() {
 	else
 		echo 0
 	fi
+}
+
+#
+# ABS Int
+#
+# Ensure we have an absolute integer.
+#
+# @param mixed Value.
+# @echo int Value.
+#
+bi_absint() {
+	local RAW=$1
+	declare -i VALUE=0
+
+	RAW=$(echo "$RAW" | sed 's/[^0-9]//g')
+	if [ ! "$RAW" ]; then
+		RAW=0
+	fi
+
+	VALUE="$RAW"
+
+	if [ ${VALUE//\*/} -lt 0 ]; then
+		VALUE=$(( 0 - $VALUE ))
+	fi
+
+	echo $VALUE
 }
 
 #
@@ -184,6 +217,12 @@ bi_help(){
 	bi_echo "\e[1m-l\e[0m, \e[1m--log\e[0m=/path/to/log"
 	bi_echo "    Log results to this file."
 	bi_echo "    Default: /var/log/blob-image.log"
+	bi_echo "\e[1m--max-age\e[0m=XX"
+	bi_echo "    Files older than this (in minutes) will be skipped."
+	bi_echo "    Modification time is used to determine age."
+	bi_echo "\e[1m--min-age\e[0m=XX"
+	bi_echo "    Files younger than this (in minutes) will be skipped."
+	bi_echo "    Modification time is used to determine age."
 	bi_echo "\e[1m--max-size\e[0m=XX"
 	bi_echo "    Files larger than this value will be skipped. Value should be in"
 	bi_echo "    bytes. K, M, and G units are allowed."
@@ -223,7 +262,7 @@ bi_help(){
 # ----------------------------------------------------------------------
 
 # Flags and options.
-BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,dry-run,help,log,max-size:,min-size:,multithreaded,quiet,skip-jpeg,skip-jpg,skip-png" -o "cdhl:mq" -- "$@")
+BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,dry-run,help,log,max-age:,min-age:,max-size:,min-size:,multithreaded,quiet,skip-jpeg,skip-jpg,skip-png" -o "cdhl:mq" -- "$@")
 eval set -- "$BI_ARGS"
 while true ; do
 	case "$1" in
@@ -290,6 +329,30 @@ while true ; do
 		-q|--quiet) # Suppress output.
 			BI_QUIET=true
 			shift
+			;;
+		--max-age) # Max file age.
+			case "$2" in
+				""|-*)
+					bi_echo "\e[1;31mValue required:\e[0m --max-age=123"
+					exit 1
+					;;
+				*)
+					MAX_AGE=$(bi_absint "$2")
+					shift 2
+					;;
+			esac
+			;;
+		--min-age) # Max file age.
+			case "$2" in
+				""|-*)
+					bi_echo "\e[1;31mValue required:\e[0m --min-age=123"
+					exit 1
+					;;
+				*)
+					MIN_AGE=$(bi_absint "$2")
+					shift 2
+					;;
+			esac
 			;;
 		--max-size) # Max file size.
 			case "$2" in
@@ -370,6 +433,17 @@ elif [ "$MIN_SIZE" -gt 1 ]; then
 	BI_FIND_COND+=' -size +'$(($MIN_SIZE - 1))c
 fi
 
+# File ages to search for.
+if [ "$MAX_AGE" -gt 0 ] && [ "$MIN_AGE" -gt 0 ]; then
+	BI_FIND_COND+=' \( -mmin +'$(($MIN_AGE))' -a -mmin -'$(($MAX_AGE))' \)'
+elif [ "$MAX_AGE" -gt 0 ]; then
+	BI_FIND_COND+=' -mmin -'$(($MAX_AGE))
+elif [ "$MIN_AGE" -gt 0 ]; then
+	BI_FIND_COND+=' -mmin +'$(($MIN_AGE))
+fi
+
+echo "$BI_FIND_COND"; exit
+
 # Build a list of paths to search from. We want to try to do this all in
 # a single pass because performance becomes terrible if Bash arrays have
 # to be sorted or merged later on.
@@ -407,6 +481,8 @@ if [ ${#BI_FILES[@]} -lt 1 ]; then
 	bi_echo "\e[1;31mError:\e[0m Nothing to do."
 	exit 1
 fi
+
+echo "${BI_FILES[@]}"; exit
 
 
 
