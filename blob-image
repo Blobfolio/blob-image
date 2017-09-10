@@ -14,6 +14,13 @@
 #	-l	log file location
 #   -m	optimize for multi-core machines
 #   -q	quiet
+#	--disable-advpng
+#	--disable-jpegoptim
+#	--disable-jpegrescan
+#	--disable-jpegtran
+#	--disable-oxipng
+#	--disable-pngcrush
+#	--disable-pngout
 #	--max-size
 #	--min-size
 #	--skip-jpeg / --skip-jpg
@@ -34,8 +41,18 @@ BI_MT=false							# Multi-threading.
 BI_QUIET=false						# Suppress stdout.
 BI_SELF="$0"						# Script location.
 BI_TMP="/dev/shm/"					# Working directory.
+
+DISABLE_ADVPNG=false
+DISABLE_JPEGOPTIM=false
+DISABLE_JPEGRESCAN=false
+DISABLE_JPEGTRAN=false
+DISABLE_OXIPNG=false
+DISABLE_PNGCRUSH=false
+DISABLE_PNGOUT=false
+
 SKIP_JPEG=false						# Skip JPEG files.
 SKIP_PNG=false						# Skip PNG files.
+
 declare -i MAX_SIZE=0				# Maximum size to scan.
 declare -i MIN_SIZE=0				# Minimum size to scan.
 TOTAL_TIME_START=$(date +"%s.%N")
@@ -119,13 +136,13 @@ use_help(){
 	use_output "battery of specialized binaries (if installed)."
 	use_output ""
 	use_output "\e[1;34mJPEG:\e[0m"
-	use_output "jpegtran    \e[35mhttp://jpegclub.org/jpegtran/\e[0m"
 	use_output "jpegoptim   \e[35mhttps://github.com/tjko/jpegoptim\e[0m"
 	use_output "jpegrescan  \e[35mhttps://github.com/kud/jpegrescan\e[0m"
+	use_output "jpegtran    \e[35mhttps://github.com/mozilla/mozjpeg\e[0m"
 	use_output ""
 	use_output "\e[1;34mPNG:\e[0m"
-	use_output "oxipng      \e[35mhttps://github.com/shssoichiro/oxipng\e[0m"
 	use_output "advpng      \e[35mhttp://www.advancemame.it/doc-advpng.html\e[0m"
+	use_output "oxipng      \e[35mhttps://github.com/shssoichiro/oxipng\e[0m"
 	use_output "pngcrush    \e[35mhttps://pmt.sourceforge.io/pngcrush/\e[0m"
 	use_output "pngout      \e[35mhttp://advsys.net/ken/utils.htm\e[0m"
 	use_output ""
@@ -152,6 +169,22 @@ use_help(){
 	use_output "    Optimize performance for multithreaded systems, where possible."
 	use_output "\e[1m-q\e[0m, \e[1m--quiet\e[0m"
 	use_output "    Suppress STDOUT."
+	use_output ""
+	use_output "\e[1m--disable-advpng\e[0m"
+	use_output "    Do not execute advpng, even if installed."
+	use_output "\e[1m--disable-jpegoptim\e[0m"
+	use_output "    Do not execute jpegoptim, even if installed."
+	use_output "\e[1m--disable-jpegrescan\e[0m"
+	use_output "    Do not execute jpegrescan, even if installed."
+	use_output "\e[1m--disable-jpegtran\e[0m"
+	use_output "    Do not execute jpegtran, even if installed."
+	use_output "\e[1m--disable-oxipng\e[0m"
+	use_output "    Do not execute oxipng, even if installed."
+	use_output "\e[1m--disable-pngcrush\e[0m"
+	use_output "    Do not execute pngcrush, even if installed."
+	use_output "\e[1m--disable-pngout\e[0m"
+	use_output "    Do not execute pngout, even if installed."
+	use_output ""
 	use_output "\e[1m--skip-jpeg\e[0m"
 	use_output "    Do not process any JPEG images."
 	use_output "\e[1m--skip-png\e[0m"
@@ -165,7 +198,7 @@ use_help(){
 # ----------------------------------------------------------------------
 
 # Flags and options.
-BI_ARGS=$(getopt -q -l "color,dry-run,help,log,multithreaded,quiet,max-size:,min-size:,skip-jpeg,skip-jpg,skip-png" -o "cdhl:mq" -- "$@")
+BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,dry-run,help,log,max-size:,min-size:,multithreaded,quiet,skip-jpeg,skip-jpg,skip-png" -o "cdhl:mq" -- "$@")
 eval set -- "$BI_ARGS"
 while true ; do
 	case "$1" in
@@ -175,6 +208,34 @@ while true ; do
 			;;
 		-c|--color) # Colorize output.
 			BI_COLOR=true
+			shift
+			;;
+		--disable-advpng) # Disable advpng.
+			DISABLE_ADVPNG=true
+			shift
+			;;
+		--disable-jpegoptim) # Disable jpegoptim.
+			DISABLE_JPEGOPTIM=true
+			shift
+			;;
+		--disable-jpegrescan) # Disable jpegrescan.
+			DISABLE_JPEGRESCAN=true
+			shift
+			;;
+		--disable-jpegtran) # Disable jpegtran.
+			DISABLE_JPEGTRAN=true
+			shift
+			;;
+		--disable-oxipng) # Disable oxipng.
+			DISABLE_OXIPNG=true
+			shift
+			;;
+		--disable-pngcrush) # Disable pngcrush.
+			DISABLE_PNGCRUSH=true
+			shift
+			;;
+		--disable-pngout) # Disable pngout.
+			DISABLE_PNGOUT=true
 			shift
 			;;
 		-d|--dry-run) # Dry run.
@@ -330,29 +391,29 @@ BI_BINARIES[pngout]=$(command -v "pngout")
 
 BI_JPEG=()
 if [ "$SKIP_JPEG" == false ]; then
-	if [ "${BI_BINARIES[jpegtran]}" ]; then
+	if [ "$DISABLE_JPEGTRAN" == false ] && [ "${BI_BINARIES[jpegtran]}" ]; then
 		BI_JPEG+=("jpegtran")
 	fi
-	if [ "${BI_BINARIES[jpegoptim]}" ]; then
+	if [ "$DISABLE_JPEGOPTIM" == false ] && [ "${BI_BINARIES[jpegoptim]}" ]; then
 		BI_JPEG+=("jpegoptim")
 	fi
-	if [ "${BI_BINARIES[jpegrescan]}" ]; then
+	if [ "$DISABLE_JPEGRESCAN" == false ] && [ "${BI_BINARIES[jpegrescan]}" ]; then
 		BI_JPEG+=("jpegrescan")
 	fi
 fi
 
 BI_PNG=()
 if [ "$SKIP_PNG" == false ]; then
-	if [ "${BI_BINARIES[advpng]}" ]; then
+	if [ "$DISABLE_ADVPNG" == false ] && [ "${BI_BINARIES[advpng]}" ]; then
 		BI_PNG+=("advpng")
 	fi
-	if [ "${BI_BINARIES[pngcrush]}" ]; then
+	if [ "$DISABLE_PNGCRUSH" == false ] && [ "${BI_BINARIES[pngcrush]}" ]; then
 		BI_PNG+=("pngcrush")
 	fi
-	if [ "${BI_BINARIES[pngout]}" ]; then
+	if [ "$DISABLE_PNGOUT" == false ] && [ "${BI_BINARIES[pngout]}" ]; then
 		BI_PNG+=("pngout")
 	fi
-	if [ "${BI_BINARIES[oxipng]}" ]; then
+	if [ "$DISABLE_OXIPNG" == false ] && [ "${BI_BINARIES[oxipng]}" ]; then
 		BI_PNG+=("oxipng")
 	fi
 fi
@@ -525,7 +586,7 @@ for i in "${BI_FILES[@]}"; do
 				eval "\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				;;
 			oxipng)
-				eval "\"${BI_BINARIES[$i]}\" -Zsq -o 6 \"$FILE_WORKING\""
+				eval "\"${BI_BINARIES[$i]}\" -Zsq -o 4 -i 0 \"$FILE_WORKING\""
 				;;
 			pngcrush)
 				if [ "$BI_MT" == false ]; then

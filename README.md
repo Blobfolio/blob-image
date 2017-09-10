@@ -30,7 +30,7 @@ Third-party utilities provide the actual compression magic. No single applicatio
  * [advpng](http://www.advancemame.it/doc-advpng.html)
  * [oxipng](https://github.com/shssoichiro/oxipng)
  * [pngcrush](http://pmt.sourceforge.net/pngcrush/)
- * [PNGOUT](http://www.jonof.id.au/kenutils)
+ * [pngout](http://www.jonof.id.au/kenutils)
 
 #### JPEG
  * [jpegoptim](http://www.kokkonen.net/tjko/projects.html)
@@ -89,6 +89,13 @@ The following runtime flags are available:
 | --min-size *=123* | Ignore files smaller than this value in bytes. `K`, `M`, `G` units are allowed. |
 | -m, --multithreaded | Optimize performance for multithreaded systems. |
 | -q, --quiet | Do not throw anything to STDOUT. |
+| --disable-advpng | Do not execute advpng. |
+| --disable-jpegoptim | Do not execute jpegoptim. |
+| --disable-jpegrescan | Do not execute jpegrescan. |
+| --disable-jpegtran | Do not execute jpegtran. |
+| --disable-oxipng | Do not execute oxipng. |
+| --disable-pngcrush | Do not execute pngcrush. |
+| --disable-pngout | Do not execute pngout. |
 | --skip-jpeg | Do not process JPEG images. |
 | --skip-png | Do not process PNG images. |
 
