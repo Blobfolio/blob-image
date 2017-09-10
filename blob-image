@@ -3,7 +3,8 @@
 # blob-image
 # version: 1.3.0
 #
-# Copyright © 2016 Blobfolio, LLC <https://blobfolio.com>
+# Copyright © 2017 Blobfolio, LLC <https://blobfolio.com>
+#
 # This work is free. You can redistribute it and/or modify it under the
 # terms of the Do What The Fuck You Want To Public License, Version 2.
 #
@@ -25,6 +26,30 @@
 #	--min-size
 #	--skip-jpeg / --skip-jpg
 #	--skip-png
+
+
+
+# ----------------------------------------------------------------------
+# Check Runtime Dependencies
+# ----------------------------------------------------------------------
+
+# Being a wrapper script, all the heavy lifting is done by hard-working
+# system programs like awk and sed. Before we do anything else, let's
+# make sure each of these can be found.
+DEPENDENCIES=("awk" "bc" "date" "file" "find" "getopt" "realpath" "sed" "sort" "stat" "touch" "wc")
+MISSING_DEP=false
+for i in "${DEPENDENCIES[@]}"; do
+	DEP_PATH=$(command -v "$i")
+	if [ ! "$DEP_PATH" ]; then
+		MISSING_DEP=true
+		>&2 echo "Error: missing system program $i"
+	fi
+done
+if [ "$MISSING_DEP" == true ]; then
+	exit 1
+fi
+
+# ----------------------------------------------------------------------
 
 
 
