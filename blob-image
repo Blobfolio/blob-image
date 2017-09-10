@@ -36,7 +36,7 @@
 # Being a wrapper script, all the heavy lifting is done by hard-working
 # system programs like awk and sed. Before we do anything else, let's
 # make sure each of these can be found.
-DEPENDENCIES=("awk" "bc" "date" "file" "find" "getopt" "realpath" "sed" "sort" "stat" "touch" "wc")
+DEPENDENCIES=("awk" "bc" "cat" "date" "file" "find" "getopt" "realpath" "sed" "sort" "stat" "touch" "tr" "wc")
 MISSING_DEP=false
 for i in "${DEPENDENCIES[@]}"; do
 	DEP_PATH=$(command -v "$i")
@@ -384,6 +384,18 @@ for i in "$@"; do
 		bi_echo "\e[1;31mInvalid path:\e[0m $i"
 	fi
 done
+
+# Paths might also come from STDIN.
+while IFS= read -r -u3 -d $'\0' BI_LINE; do
+	i=$(realpath "$BI_LINE")
+	if [ -f "$i" ]; then
+		BI_FIND_PATHS+=("\"$i\"")
+	elif [ -d "$i" ]; then
+		BI_FIND_PATHS+=("\"$i\"")
+	else
+		bi_echo "\e[1;31mInvalid path:\e[0m $i"
+	fi
+done 3< <(cat - | tr '\n' '\0')
 
 # Finally, search!
 while IFS= read -r -u3 -d $'\0' BI_LINE; do
