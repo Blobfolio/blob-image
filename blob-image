@@ -683,7 +683,11 @@ for i in "${BI_FILES[@]}"; do
 				eval "\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				;;
 			oxipng)
-				eval "\"${BI_BINARIES[$i]}\" -Zsq -o 4 -i 0 \"$FILE_WORKING\""
+				if [ "$BI_MT" == false ]; then
+					eval "\"${BI_BINARIES[$i]}\" -Zsq --threads 1 --fix -o 4 -i 0 \"$FILE_WORKING\""
+				else
+					eval "\"${BI_BINARIES[$i]}\" -Zsq --fix -o 4 -i 0 \"$FILE_WORKING\""
+				fi
 				;;
 			pngcrush)
 				if [ "$BI_MT" == false ]; then
