@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.3.1
+# version: 1.3.2
 #
 # Copyright © 2017 Blobfolio, LLC <https://blobfolio.com>
 #
@@ -187,7 +187,7 @@ bi_absint() {
 bi_help(){
 	BI_QUIET=false
 
-	bi_echo "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.3.1"
+	bi_echo "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.3.2"
 	bi_echo ""
 	bi_echo "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
 	bi_echo "prioritizes compression over speed, running each image through a"
@@ -683,7 +683,11 @@ for i in "${BI_FILES[@]}"; do
 				eval "\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				;;
 			oxipng)
-				eval "\"${BI_BINARIES[$i]}\" -Zsq -o 4 -i 0 \"$FILE_WORKING\""
+				if [ "$BI_MT" == false ]; then
+					eval "\"${BI_BINARIES[$i]}\" -Zsq --threads 1 --fix -o 4 -i 0 \"$FILE_WORKING\""
+				else
+					eval "\"${BI_BINARIES[$i]}\" -Zsq --fix -o 4 -i 0 \"$FILE_WORKING\""
+				fi
 				;;
 			pngcrush)
 				if [ "$BI_MT" == false ]; then
