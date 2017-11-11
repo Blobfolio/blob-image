@@ -47,7 +47,7 @@ You can simply download the blob-image script and make it executable:
 wget -O /usr/bin/blob-image https://raw.githubusercontent.com/Blobfolio/blob-image/master/blob-image && chmod +x /usr/bin/blob-image
 ```
 
-Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Stretch and Ubuntu Zesty. (Other Debian-based distributions may also work, but aren't officially supported.)
+Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Stretch and Ubuntu Artful. (Other Debian-based distributions may also work, but aren't officially supported.)
 
 Installing blob-image this way will also install each of the different compression tools, so you probably want to do this.
 
@@ -63,8 +63,8 @@ apt-get install apt-transport-https
 # Debian Stretch.
 echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ stretch main" > /etc/apt/sources.list.d/blobfolio.list
 
-# Ubuntu Zesty.
-echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ zesty main" > /etc/apt/sources.list.d/blobfolio.list
+# Ubuntu Artful.
+echo "deb [arch=amd64] https://apt.blobfolio.com/debian/ artful main" > /etc/apt/sources.list.d/blobfolio.list
 
 # Update APT sources.
 apt-get update
