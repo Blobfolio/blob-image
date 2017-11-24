@@ -49,8 +49,6 @@ wget -O /usr/bin/blob-image https://raw.githubusercontent.com/Blobfolio/blob-ima
 
 Alternatively, `.deb` binaries are available via Blobfolio's APT repository for Debian Stretch and Ubuntu Artful. (Other Debian-based distributions may also work, but aren't officially supported.)
 
-Installing blob-image this way will also install each of the different compression tools, so you probably want to do this.
-
 ```bash
 # Import the signing key.
 wget -qO - https://apt.blobfolio.com/public.gpg.key | apt-key add -
@@ -90,6 +88,7 @@ The following runtime flags are available:
 | --max-size *=123* | Ignore files larger than this value (in bytes). `K`, `M`, `G` units are allowed. | 
 | --min-size *=123* | Ignore files smaller than this value (in bytes). `K`, `M`, `G` units are allowed. |
 | -m, --multithreaded | Optimize performance for multithreaded systems. |
+| -o, --overkill | By default jpegtran, advpng, and pngcrush are skipped when made redundant by MozJPEG or oxipng. Overkill Mode runs images through them anyway. |
 | -q, --quiet | Do not throw anything to STDOUT. |
 | --disable-advpng | Do not execute advpng. |
 | --disable-jpegoptim | Do not execute jpegoptim. |

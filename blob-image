@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # blob-image
-# version: 1.3.2
+# version: 1.4.0
 #
 # Copyright © 2017 Blobfolio, LLC <https://blobfolio.com>
 #
@@ -14,6 +14,7 @@
 #   -h	help
 #	-l	log file location
 #   -m	optimize for multi-core machines
+#   -o	overkill mode
 #   -q	quiet
 #
 #	--disable-advpng
@@ -68,6 +69,7 @@ BI_COLOR=false						# Colored output.
 BI_DRY=false						# Dry run.
 BI_LOG="/var/log/blob-image.log"	# Log file.
 BI_MT=false							# Multi-threading.
+BI_OVERKILL=false					# Use shitty programs too.
 BI_QUIET=false						# Suppress stdout.
 BI_SELF="$0"						# Script location.
 BI_TMP="/dev/shm/"					# Working directory.
@@ -187,7 +189,7 @@ bi_absint() {
 bi_help(){
 	BI_QUIET=false
 
-	bi_echo "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.3.2"
+	bi_echo "\e[1;34mblob-image\e[0m \e[90m------------------------------------------------------\e[0m v1.4.0"
 	bi_echo ""
 	bi_echo "blob-image is a lossless JPEG/PNG image compressor written in BASH. It"
 	bi_echo "prioritizes compression over speed, running each image through a"
@@ -231,6 +233,10 @@ bi_help(){
 	bi_echo "    bytes. K, M, and G units are allowed."
 	bi_echo "\e[1m-m\e[0m, \e[1m--multithreaded\e[0m"
 	bi_echo "    Optimize performance for multithreaded systems, where possible."
+	bi_echo "\e[1m-o\e[0m, \e[1m--overkill\e[0m"
+	bi_echo "    By default jpegtran, advpng, and pngcrush are skipped when made"
+	bi_echo "    redundant by MozJPEG or oxipng. Overkill Mode runs images through"
+	bi_echo "    them anyway."
 	bi_echo "\e[1m-q\e[0m, \e[1m--quiet\e[0m"
 	bi_echo "    Suppress STDOUT."
 	bi_echo ""
@@ -262,7 +268,7 @@ bi_help(){
 # ----------------------------------------------------------------------
 
 # Flags and options.
-BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,dry-run,help,log,max-age:,min-age:,max-size:,min-size:,multithreaded,quiet,skip-jpeg,skip-jpg,skip-png" -o "cdhl:mq" -- "$@")
+BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,dry-run,help,log,max-age:,min-age:,max-size:,min-size:,multithreaded,overkill,quiet,skip-jpeg,skip-jpg,skip-png" -o "cdhl:moq" -- "$@")
 eval set -- "$BI_ARGS"
 while true ; do
 	case "$1" in
@@ -324,6 +330,10 @@ while true ; do
 			;;
 		-m|--multithreaded) # Use multi-threading optimizations.
 			BI_MT=true
+			shift
+			;;
+		-o|--overkill) # Include shitty programs too.
+			BI_OVERKILL=true
 			shift
 			;;
 		-q|--quiet) # Suppress output.
@@ -475,17 +485,34 @@ fi
 # ----------------------------------------------------------------------
 declare -A BI_BINARIES
 
-BI_BINARIES[advpng]=$(command -v "advpng")
-BI_BINARIES[jpegoptim]=$(command -v "jpegoptim")
-BI_BINARIES[jpegrescan]=$(command -v "jpegrescan")
+# Priority JPEG programs.
 BI_BINARIES[jpegtran]=$(command -v "/opt/mozjpeg/bin/jpegtran") # Prefer mozjpeg version.
-if [ ! "${BI_BINARIES[jpegtran]}" ]; then
-	BI_BINARIES[jpegtran]=$(command -v "jpegtran")
-fi
+BI_BINARIES[jpegoptim]=$(command -v "jpegoptim")
+
+# Priority PNG programs.
 BI_BINARIES[oxipng]=$(command -v "oxipng")
-BI_BINARIES[pngcrush]=$(command -v "pngcrush")
 BI_BINARIES[pngout]=$(command -v "pngout")
 
+# Secondary JPEG programs.
+if [ "$BI_OVERKILL" == true ] || [ "$DISABLE_JPEGTRAN" == true ] || [ ! "${BI_BINARIES[jpegtran]}" ]; then
+	if [ ! "${BI_BINARIES[jpegtran]}" ]; then
+		BI_BINARIES[jpegtran]=$(command -v "jpegtran")
+	fi
+	BI_BINARIES[jpegrescan]=$(command -v "jpegrescan")
+else
+	BI_BINARIES[jpegrescan]=''
+fi
+
+# Secondary PNG programs.
+if [ "$BI_OVERKILL" == true ] || [ "$DISABLE_OXIPNG" == true ] || [ ! "${BI_BINARIES[oxipng]}" ]; then
+	BI_BINARIES[advpng]=$(command -v "advpng")
+	BI_BINARIES[pngcrush]=$(command -v "pngcrush")
+else
+	BI_BINARIES[advpng]=''
+	BI_BINARIES[pngcrush]=''
+fi
+
+# JPEG programs to use.
 BI_JPEG=()
 if [ "$SKIP_JPEG" == false ]; then
 	if [ "$DISABLE_JPEGTRAN" == false ] && [ "${BI_BINARIES[jpegtran]}" ]; then
@@ -499,6 +526,7 @@ if [ "$SKIP_JPEG" == false ]; then
 	fi
 fi
 
+# PNG programs to use.
 BI_PNG=()
 if [ "$SKIP_PNG" == false ]; then
 	if [ "$DISABLE_ADVPNG" == false ] && [ "${BI_BINARIES[advpng]}" ]; then
