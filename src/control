@@ -4,7 +4,7 @@ Section: base
 Priority: optional
 Architecture: amd64
 Depends: libjpeg-turbo-progs, libturbojpeg1 | libjpeg62-turbo | libjpeg-turbo8
-Suggests: advancecomp, jpegoptim, oxipng, pngcrush, pngout, jpegrescan-perl, mozjpeg | jpegtran
+Suggests: advancecomp, jpegoptim, oxipng, pngcrush, pngout, jpegrescan-perl, mozjpeg | jpegtran, zopflipng
 Maintainer: Blobfolio LLC <hello@blobfolio.com>
 Homepage: https://github.com/Blobfolio/blob-image
 Installed-Size: %SIZE%
