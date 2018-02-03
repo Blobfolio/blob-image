@@ -33,6 +33,7 @@ Third-party utilities provide the actual compression magic. No single applicatio
  * [oxipng](https://github.com/shssoichiro/oxipng)
  * [pngcrush](http://pmt.sourceforge.net/pngcrush/)
  * [pngout](http://www.jonof.id.au/kenutils)
+ * [zopflipng](https://github.com/google/zopfli)
 
 #### JPEG
  * [jpegoptim](http://www.kokkonen.net/tjko/projects.html)
@@ -92,7 +93,7 @@ The following runtime flags are available:
 | --max-size *=123* | Ignore files larger than this value (in bytes). `K`, `M`, `G` units are allowed. | 
 | --min-size *=123* | Ignore files smaller than this value (in bytes). `K`, `M`, `G` units are allowed. |
 | -m, --multithreaded | Optimize performance for multithreaded systems. |
-| -o, --overkill | By default jpegtran, advpng, and pngcrush are skipped when made redundant by MozJPEG or oxipng. Overkill Mode runs images through them anyway. |
+| -o, --overkill | By default jpegtran, advpng, pngcrush, and zopflipng are skipped when made redundant by MozJPEG or oxipng. Overkill Mode runs images through them anyway. |
 | -q, --quiet | Do not throw anything to STDOUT. |
 | --disable-advpng | Do not execute advpng. |
 | --disable-jpegoptim | Do not execute jpegoptim. |
@@ -101,6 +102,7 @@ The following runtime flags are available:
 | --disable-oxipng | Do not execute oxipng. |
 | --disable-pngcrush | Do not execute pngcrush. |
 | --disable-pngout | Do not execute pngout. |
+| --disable-zopflipng | Do not execute zopflipng. |
 | --skip-jpeg | Do not process JPEG images. |
 | --skip-png | Do not process PNG images. |
 
