@@ -33,6 +33,8 @@
 #
 #	--skip-jpeg / --skip-jpg
 #	--skip-png
+#
+#	--timeout
 
 
 
@@ -73,6 +75,7 @@ BI_MT=false							# Multi-threading.
 BI_OVERKILL=false					# Use shitty programs too.
 BI_QUIET=false						# Suppress stdout.
 BI_SELF="$0"						# Script location.
+BI_TIMEOUT=0						# Stop trying after X seconds.
 BI_TMP="/dev/shm/"					# Working directory.
 
 DISABLE_ADVPNG=false
@@ -242,6 +245,10 @@ bi_help(){
 	bi_echo "    through them anyway."
 	bi_echo "\e[1m-q\e[0m, \e[1m--quiet\e[0m"
 	bi_echo "    Suppress STDOUT."
+	bi_echo "\e[1m--timeout\e[0m=XX"
+	bi_echo "    Some images — particularly PNGs — can be hard to fully optimize."
+	bi_echo "    This flag can be used to kill a long-running process if it stretches"
+	bi_echo "    beyond X seconds, letting blob-image move on to the next item."
 	bi_echo ""
 	bi_echo "\e[1m--disable-advpng\e[0m"
 	bi_echo "    Do not execute advpng, even if installed."
@@ -273,7 +280,7 @@ bi_help(){
 # ----------------------------------------------------------------------
 
 # Flags and options.
-BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,disable-zopflipng,dry-run,help,log,max-age:,min-age:,max-size:,min-size:,multithreaded,overkill,quiet,skip-jpeg,skip-jpg,skip-png" -o "cdhl:moq" -- "$@")
+BI_ARGS=$(getopt -q -l "color,disable-advpng,disable-jpegoptim,disable-jpegrescan,disable-jpegtran,disable-oxipng,disable-pngcrush,disable-pngout,disable-zopflipng,dry-run,help,log,max-age:,min-age:,max-size:,min-size:,multithreaded,overkill,quiet,skip-jpeg,skip-jpg,skip-png,timeout:" -o "cdhl:moq" -- "$@")
 eval set -- "$BI_ARGS"
 while true ; do
 	case "$1" in
@@ -405,6 +412,18 @@ while true ; do
 			SKIP_PNG=true
 			shift
 			;;
+		--timeout) # Stop trying after X seconds.
+			case "$2" in
+				""|-*)
+					bi_echo "\e[1;31mValue required:\e[0m --timeout=123"
+					exit 1
+					;;
+				*)
+					BI_TIMEOUT=$(bi_absint "$2")
+					shift 2
+					;;
+			esac
+			;;
 		-d|-f) # Deprecated. Paths will get checked below.
 			shift
 			;;
@@ -420,6 +439,20 @@ done
 if [ $BI_HELP == true ]; then
 	bi_help
 	exit 0
+fi
+
+# Timeout requires "timeout" to be present.
+if [ $BI_TIMEOUT -gt 0 ]; then
+	DEP_PATH=$(command -v "timeout")
+	if [ ! "$DEP_PATH" ]; then
+		bi_echo "\e[1;31mError:\e[0m The timeout flag requires the CLI tool 'timeout'."
+		exit 1
+	fi
+
+	# Prefix all commands with this.
+	BI_TIMEOUT="timeout $BI_TIMEOUT "
+else
+	BI_TIMEOUT=""
 fi
 
 
@@ -709,40 +742,40 @@ for i in "${BI_FILES[@]}"; do
 		# Run the appropriate binary.
 		case $i in
 			advpng)
-				eval "\"${BI_BINARIES[$i]}\" -q -f -z4 \"$FILE_WORKING\""
+				eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -q -f -z4 \"$FILE_WORKING\""
 				;;
 			jpegoptim)
-				eval "\"${BI_BINARIES[$i]}\" -q -f --strip-all --all-progressive \"$FILE_WORKING\""
+				eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -q -f --strip-all --all-progressive \"$FILE_WORKING\""
 				;;
 			jpegrescan)
 				if [ "$BI_MT" == false ]; then
-					eval "\"${BI_BINARIES[$i]}\" -q \"$FILE_WORKING\" \"$FILE_WORKING.bak\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
+					eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -q \"$FILE_WORKING\" \"$FILE_WORKING.bak\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				else
-					eval "\"${BI_BINARIES[$i]}\" -q -t \"$FILE_WORKING\" \"$FILE_WORKING.bak\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
+					eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -q -t \"$FILE_WORKING\" \"$FILE_WORKING.bak\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				fi
 				;;
 			jpegtran)
-				eval "\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
+				eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -copy none -optimize -progressive -outfile \"$FILE_WORKING.bak\" \"$FILE_WORKING\" && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				;;
 			oxipng)
 				if [ "$BI_MT" == false ]; then
-					eval "\"${BI_BINARIES[$i]}\" -Zsq --threads 1 --fix -o 4 -i 0 \"$FILE_WORKING\""
+					eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -Zsq --threads 1 --fix -o 4 -i 0 \"$FILE_WORKING\""
 				else
-					eval "\"${BI_BINARIES[$i]}\" -Zsq --fix -o 4 -i 0 \"$FILE_WORKING\""
+					eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -Zsq --fix -o 4 -i 0 \"$FILE_WORKING\""
 				fi
 				;;
 			pngcrush)
 				if [ "$BI_MT" == false ]; then
-					eval "\"${BI_BINARIES[$i]}\" -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1"
+					eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -rem gAMA -rem alla -rem cHRM -rem iCCP -rem sRGB -rem time \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1"
 				else
-					eval "\"${BI_BINARIES[$i]}\" -rem gAMA -rem alla -brute -rem cHRM -rem iCCP -rem sRGB -rem time \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1"
+					eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -rem gAMA -rem alla -brute -rem cHRM -rem iCCP -rem sRGB -rem time \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1"
 				fi
 				;;
 			pngout)
-				eval "\"${BI_BINARIES[$i]}\" \"$FILE_WORKING\" -q"
+				eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" \"$FILE_WORKING\" -q"
 				;;
 			zopflipng)
-				eval "\"${BI_BINARIES[$i]}\" -m \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1 && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
+				eval "${BI_TIMEOUT}\"${BI_BINARIES[$i]}\" -m \"$FILE_WORKING\" \"$FILE_WORKING.bak\" >/dev/null 2>&1 && mv \"$FILE_WORKING.bak\" \"$FILE_WORKING\""
 				;;
 		esac
 
